@@ -478,6 +478,71 @@ firewall-cmd --permanent --add-port=1515/tcp
 
 ---
 
+---
+
+## Testing Machine: vulnerable-machine
+
+This is a designated vulnerable machine for security testing and stress testing.
+
+### Agent Details
+
+| Field | Value |
+|-------|-------|
+| Agent ID | 004 |
+| Hostname | vulnerable-machine |
+| IP | 100.70.191.1 (Tailscale) |
+| Agent Key | `38f74b8717ac74d5dfab0eb087b173d9213c948ef27f886226fef919ddef5598` |
+
+### Connection Steps
+
+On the vulnerable-machine:
+
+```bash
+# Install Wazuh agent (if not installed)
+curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --dearmor -o /usr/share/keyrings/wazuh.gpg
+echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee /etc/apt/sources.list.d/wazuh.list
+apt-get update
+apt-get install -y wazuh-agent
+```
+
+Configure `/var/ossec/etc/ossec.conf` with manager IP:
+
+```xml
+<client>
+  <server>
+    <address>MANAGER_TAILSALE_IP</address>
+    <port>1514</port>
+    <protocol>tcp</protocol>
+  </server>
+</client>
+```
+
+Register and start:
+
+```bash
+/var/ossec/bin/agent-auth -m <MANAGER_IP> -p 1515
+systemctl enable wazuh-agent
+systemctl start wazuh-agent
+/var/ossec/bin/wazuh-control status
+```
+
+### Quick Connect Script
+
+Use the provided scripts:
+- `install-vulnerable-machine.sh` - Full installation
+- `connect-agent.sh` - Quick connection
+
+### Verification
+
+On manager:
+```bash
+/var/ossec/bin/manage_agents -l
+```
+
+Should show: `ID: 004, Name: vulnerable-machine, IP: any`
+
+---
+
 ## Troubleshooting
 
 ### Agent Not Connecting
