@@ -1,0 +1,351 @@
+# Wazuh Configuration Reference
+
+This file contains example configurations for Wazuh. Adjust values according to your environment.
+
+## Basic Configuration (ossec.conf)
+
+```xml
+<ossec_config>
+  <!-- Global Settings -->
+  <global>
+    <jsonout_output>yes</jsonout_output>
+    <alerts_log>yes</alerts_log>
+    <logall>yes</logall>
+    <logall_json>yes</logall_json>
+    <email_notification>no</email_notification>
+  </global>
+
+  <!-- Alerts Configuration -->
+  <alerts>
+    <log_alert_level>1</log_alert_level>
+    <email_alert_level>7</email_alert_level>
+  </alerts>
+
+  <!-- Decoder Files -->
+  <rules>
+    <include>ruleset/rules.xml</include>
+    <include>ruleset/rules/*.xml</include>
+    <include>etc/rules/*.xml</include>
+  </rules>
+
+  <!-- Decoders -->
+  <decoder>
+    <include>ruleset/decoders.xml</include>
+    <include>ruleset/decoders/*.xml</include>
+  </decoder>
+
+  <!-- Syscheck - File Integrity Monitoring -->
+  <syscheck>
+    <disabled>no</disabled>
+    <frequency>43200</frequency>
+    <scan_on_start>yes</scan_on_start>
+    <alert_new_files>yes</alert_new_files>
+    
+    <!-- Directories to monitor -->
+    <directories>/etc,/usr/bin,/usr/sbin</directories>
+    <directories>/bin,/sbin</directories>
+    <directories>/var/www,/var/log</directories>
+    
+    <!-- Ignore patterns -->
+    <ignore>/etc/mtab</ignore>
+    <ignore>/etc/hosts.deny</ignore>
+    <ignore>/etc/bluetooth/</ignore>
+    <ignore>/proc</ignore>
+    
+    <!-- File size limit (MB) -->
+    <file_size_limit>100</file_size_limit>
+    
+    <!-- Real-time monitoring -->
+    <directories realtime="yes">/etc,/var/www</directories>
+  </syscheck>
+
+  <!-- Rootcheck - Rootkit Detection -->
+  <rootcheck>
+    <disabled>no</disabled>
+    <check_files>yes</check_files>
+    <check_trojans>yes</check_trojans>
+    <check_dev>yes</check_dev>
+    <check_sys>yes</check_sys>
+    <check_pids>yes</check_pids>
+    <check_ports>yes</check_ports>
+    <check_if>yes</check_if>
+    <frequency>43200</frequency>
+    <rootkit_files>etc/rootcheck/rootkit_files.txt</rootkit_files>
+    <rootkit_trojans>etc/rootcheck/rootkit_trojans.txt</rootkit_trojans>
+  </rootcheck>
+
+  <!-- Localfile - Log Collection -->
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/syslog</location>
+  </localfile>
+  
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/messages</location>
+  </localfile>
+  
+  <localfile>
+    <log_format>apache</log_format>
+    <location>/var/log/apache2/access.log</location>
+  </localfile>
+  
+  <localfile>
+    <log_format>apache</log_format>
+    <location>/var/log/apache2/error.log</location>
+  </localfile>
+  
+  <localfile>
+    <log_format>nginx</log_format>
+    <location>/var/log/nginx/access.log</location>
+  </localfile>
+  
+  <localfile>
+    <log_format>nginx</log_format>
+    <location>/var/log/nginx/error.log</location>
+  </localfile>
+  
+  <localfile>
+    <log_format>mysql</log_format>
+    <location>/var/log/mysql/error.log</location>
+  </localfile>
+  
+  <localfile>
+    <log_format>postgresql</log_format>
+    <location>/var/log/postgresql/postgresql.log</location>
+  </localfile>
+
+  <!-- Active Response Configuration -->
+  <active-response>
+    <disabled>no</disabled>
+    <ca_verification>yes</ca_verification>
+  </active-response>
+
+  <!-- Client Configuration (for agents) -->
+  <client>
+    <server>
+      <address>MANAGER_IP</address>
+      <port>1514</port>
+      <protocol>tcp</protocol>
+    </server>
+  </client>
+
+  <!-- Buffer Configuration -->
+  <buffer>
+    <disabled>no</disabled>
+    <queue_size>131072</queue_size>
+    <events_per_second>500</events_per_second>
+  </buffer>
+
+  <!-- Crypto Configuration -->
+  <crypto_control>
+    <type>aes</type>
+    <size>256</size>
+  </crypto_control>
+</ossec_config>
+```
+
+## Agent Configuration Template
+
+```xml
+<ossec_config>
+  <client>
+    <server>
+      <address>192.168.1.100</address>
+      <port>1514</port>
+      <protocol>tcp</protocol>
+    </server>
+    <config-profile>ubuntu,ubuntu22</config-profile>
+  </client>
+
+  <syscheck>
+    <disabled>no</disabled>
+    <frequency>21600</frequency>
+    <scan_on_start>yes</scan_on_start>
+    <directories>/etc,/usr/bin,/usr/sbin</directories>
+  </syscheck>
+
+  <rootcheck>
+    <disabled>no</disabled>
+    <frequency>86400</frequency>
+  </rootcheck>
+
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/syslog</location>
+  </localfile>
+
+  <localfile>
+    <log_format>command</log_format>
+    <command>df -P</command>
+    <frequency>360</frequency>
+  </localfile>
+
+  <localfile>
+    <log_format>journald</log_format>
+    <location>journald</location>
+  </localfile>
+
+  <buffer>
+    <queue_size>65536</queue_size>
+  </buffer>
+</ossec_config>
+```
+
+## Custom Rules Examples
+
+Save to `/var/ossec/etc/rules/local_rules.xml`:
+
+```xml
+<group name="soc,local">
+  <!-- Brute Force Detection -->
+  <rule id="100001" level="10">
+    <if_sid>5716</if_sid>
+    <match>authentication failure</match>
+    <frequency>5</frequency>
+    <time_frame>10m</time_frame>
+    <description>SSH brute force attack detected</description>
+    <mitre>
+      <id>T1110</id>
+      <tactic>Brute Force</tactic>
+    </mitre>
+  </rule>
+
+  <!-- Successful Login After Brute Force -->
+  <rule id="100002" level="12">
+    <if_sid>100001</if_sid>
+    <match>Accepted password</match>
+    <description>Successful login after brute force attempt</description>
+    <mitre>
+      <id>T1078</id>
+      <tactic>Valid Accounts</tactic>
+    </mitre>
+  </rule>
+
+  <!-- Malware Detection -->
+  <rule id="100003" level="15">
+    <if_sid>510</if_sid>
+    <match>Trojaned version</match>
+    <description>Malware/Trojan detected</description>
+    <mitre>
+      <id>T1060</id>
+      <tactic>Persistence</tactic>
+    </mitre>
+  </rule>
+
+  <!-- Privilege Escalation -->
+  <rule id="100004" level="12">
+    <if_sid>100000</if_sid>
+    <match>sudo:session opened</match>
+    <description>Privilege escalation detected</description>
+    <mitre>
+      <id>T1548</id>
+      <tactic>Privilege Escalation</tactic>
+    </mitre>
+  </rule>
+
+  <!-- Suspicious Process -->
+  <rule id="100005" level="10">
+    <if_sid>100000</if_sid>
+    <match>suspicious execution</match>
+    <description>Suspicious process execution</description>
+    <mitre>
+      <id>T1059</id>
+      <tactic>Execution</tactic>
+    </mitre>
+  </rule>
+
+  <!-- File Modification in System Directory -->
+  <rule id="100006" level="8">
+    <if_sid>550</if_sid>
+    <match>/etc/passwd</match>
+    <description>Modification of system file</description>
+    <mitre>
+      <id>T1547</id>
+      <tactic>Persistence</tactic>
+    </mitre>
+  </rule>
+
+  <!-- Network Connection to Suspicious Port -->
+  <rule id="100007" level="7">
+    <if_sid>100000</if_sid>
+    <match>Connection to port</match>
+    <description>Network connection to suspicious port</description>
+    <mitre>
+      <id>T1071</id>
+      <tactic>Command and Control</tactic>
+    </mitre>
+  </rule>
+</group>
+```
+
+## Active Response Configuration
+
+```xml
+<active-response>
+  <disabled>no</disabled>
+  
+  <!-- Block IP for network attacks -->
+  <command>
+    <name>firewall-drop</name>
+    <executable>firewall-drop.sh</executable>
+    <timeout_allowed>yes</timeout_allowed>
+  </command>
+  
+  <!-- Add to hosts.deny for SSH attacks -->
+  <command>
+    <name>host-deny</name>
+    <executable>host-deny.sh</executable>
+    <timeout_allowed>yes</timeout_allowed>
+  </command>
+  
+  <!-- Disable compromised account -->
+  <command>
+    <name>disable-account</name>
+    <executable>disable-account.sh</executable>
+    <timeout_allowed>yes</timeout_allowed>
+  </command>
+
+  <!-- Define when to trigger responses -->
+  <active-response>
+    <command>firewall-drop</command>
+    <location>local</location>
+    <rules_id>100001,100002,100003</rules_id>
+  </active-response>
+  
+  <active-response>
+    <command>host-deny</command>
+    <location>local</location>
+    <rules_id>100001,100002</rules_id>
+  </active-response>
+</active-response>
+```
+
+## Integration Configuration
+
+For webhook integration with n8n:
+
+```xml
+<integration>
+  <name>webhook</name>
+  <hook_url>http://n8n-host:5678/webhook/wazuh-alerts</hook_url>
+  <level>7</level>
+  <alert_format>json</alert_format>
+  <options>
+    <header>
+      <name>Content-Type</name>
+      <value>application/json</value>
+    </header>
+  </options>
+</integration>
+```
+
+## Docker Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `INDEXER_URL` | Wazuh Indexer URL | https://wazuh.indexer:9200 |
+| `INDEXER_USERNAME` | Indexer username | admin |
+| `INDEXER_PASSWORD` | Indexer password | admin |
+| `FILEBEAT_ENABLED` | Enable filebeat | true |
+| `OPENSEARCH_JAVA_OPTS` | Java memory options | -Xms512m -Xmx512m |

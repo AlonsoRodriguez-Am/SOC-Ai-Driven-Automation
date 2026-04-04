@@ -1,0 +1,140 @@
+version: '3'
+
+services:
+  zammad-postgresql:
+    image: postgres:15
+    hostname: zammad-postgresql
+    container_name: soc-zammad-postgresql
+    environment:
+      - POSTGRES_DB=zammad_production
+      - POSTGRES_USER=zammad
+      - POSTGRES_PASSWORD=zammad_secure_pass_2026
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+    networks:
+      - soc-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zammad"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zammad-elasticsearch:
+    image: elasticsearch:7.17.16
+    hostname: zammad-elasticsearch
+    container_name: soc-zammad-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - xpack.security.enabled=false
+      - "discovery.seed_hosts=elasticsearch"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - soc-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zammad-memcached:
+    image: memcached:alpine
+    hostname: zammad-memcached
+    container_name: soc-zammad-memcached
+    networks:
+      - soc-net
+    restart: unless-stopped
+
+  zammad-redis:
+    image: redis:7.2-alpine
+    hostname: zammad-redis
+    container_name: soc-zammad-redis
+    networks:
+      - soc-net
+    restart: unless-stopped
+
+  zammad-railsserver:
+    image: zammad/zammad:7.0.0-0058
+    hostname: zammad-railsserver
+    container_name: soc-zammad-railsserver
+    environment:
+      - DATABASE_URL=postgres://zammad:zammad_secure_pass_2026@zammad-postgresql:5432/zammad_production
+      - REDIS_URL=redis://zammad-redis:6379
+      - MEMCACHED_SERVERS=zammad-memcached:11211
+      - ELASTICSEARCH_URL=http://zammad-elasticsearch:9200
+      - TZ=America/New_York
+    depends_on:
+      zammad-postgresql:
+        condition: service_healthy
+      zammad-elasticsearch:
+        condition: service_healthy
+      zammad-memcached:
+        condition: service_started
+      zammad-redis:
+        condition: service_started
+    volumes:
+      - ./data/rails:/opt/zammad/storage
+    networks:
+      - soc-net
+    restart: unless-stopped
+
+  zammad-scheduler:
+    image: zammad/zammad:7.0.0-0058
+    hostname: zammad-scheduler
+    container_name: soc-zammad-scheduler
+    command: ["zammad-docker-entrypoint", "scheduler"]
+    environment:
+      - DATABASE_URL=postgres://zammad:zammad_secure_pass_2026@zammad-postgresql:5432/zammad_production
+      - REDIS_URL=redis://zammad-redis:6379
+      - MEMCACHED_SERVERS=zammad-memcached:11211
+      - ELASTICSEARCH_URL=http://zammad-elasticsearch:9200
+      - TZ=America/New_York
+    depends_on:
+      - zammad-railsserver
+    networks:
+      - soc-net
+    restart: unless-stopped
+
+  zammad-websocket:
+    image: zammad/zammad:7.0.0-0058
+    hostname: zammad-websocket
+    container_name: soc-zammad-websocket
+    command: ["zammad-docker-entrypoint", "websocket"]
+    environment:
+      - DATABASE_URL=postgres://zammad:zammad_secure_pass_2026@zammad-postgresql:5432/zammad_production
+      - REDIS_URL=redis://zammad-redis:6379
+      - MEMCACHED_SERVERS=zammad-memcached:11211
+      - ELASTICSEARCH_URL=http://zammad-elasticsearch:9200
+      - TZ=America_New_York
+    depends_on:
+      - zammad-railsserver
+    networks:
+      - soc-net
+    restart: unless-stopped
+
+  zammad-nginx:
+    image: zammad/zammad:7.0.0-0058
+    hostname: zammad-nginx
+    container_name: soc-zammad-nginx
+    ports:
+      - "8080:8080"
+    command: ["zammad-docker-entrypoint", "nginx"]
+    volumes:
+      - ./data/nginx:/var/log/zammad
+    depends_on:
+      - zammad-railsserver
+      - zammad-websocket
+    networks:
+      - soc-net
+    restart: unless-stopped
+
+volumes:
+  postgresql-data:
+  elasticsearch-data:
+
+networks:
+  soc-net:
+    driver: bridge

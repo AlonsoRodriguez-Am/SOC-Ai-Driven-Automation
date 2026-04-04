@@ -1,0 +1,285 @@
+{
+  "name": "Agent 2: The Responder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        },
+        "duration": 5
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8080/api/v1/tickets",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Token token={{$credentials.zammad_api_token}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "get-pending",
+      "name": "Get Pending Tickets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1
+      },
+      "id": "loop-tickets",
+      "name": "Loop Over Tickets",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://localhost:55000/agents/{{$json.group_ids?.[0]}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$credentials.wazuh_api_token}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "get-context",
+      "name": "Get Wazuh Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent",
+        "authentication": "queryAuth",
+        "queryAuth": {
+          "addTokenTo": "url",
+          "key": "key",
+          "value": "={{$credentials.gemini_api_key}}"
+        },
+        "sendBody": true,
+        "body": "={{JSON.stringify({\n  contents: [{\n    parts: [{\n      text: \"Perform deep threat analysis for this security alert.\\n\\nAlert Details:\\n- Rule ID: \" + $json.rule_id + \"\\n- Level: \" + $json.level + \"\\n- Description: \" + $json.title + \"\\n- MITRE: \" + $json.mitre_id + \" - \" + $json.mitre_tactic + \"\\n\\nProvide:1. Blast radius assessment\\n2. Business impact\\n3. Recommended remediation actions\\n4. Confidence score (0-100)\\n5. True positive likelihood\"\n    }]\n  }]\n})}}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "deep-analysis",
+      "name": "Deep AI Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format analysis and update data\nconst currentItem = $input.first().json;\nconst ticketData = currentItem.json;\nconst aiResponse = currentItem.candidates?.[0]?.content?.parts?.[0]?.text || '';\n\n// Extract confidence from AI response\nconst confidenceMatch = aiResponse.match(/(\\d{1,3})%?\\s*(?:confidence)/i);\nconst confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : 50;\n\nconst update = {\n  group: confidence >= 80 ? \"SOC-Triage\" : currentItem.group,\n  state: \"open\",\n  custom_fields: {\n    soc_confidence: confidence,\n    soc_proposal: aiResponse,\n    soc_action: confidence >= 80 ? \"pending\" : \"manual_review\",\n    soc_mitre_id: ticketData.custom_fields?.soc_mitre_id || '',\n    soc_mitre_tactic: ticketData.custom_fields?.soc_mitre_tactic || ''\n  },\n  article: {\n    body: `Deep Analysis Results:\\n\\n${aiResponse}\\n\\n---\\nConfidence Score: ${confidence}%\\nAction: ${confidence >= 80 ? \"Awaiting Approval\" : \"Manual Review\"}`,\n    type: \"note\",\n    sender: \"AI Analysis\"\n  }\n};\n\nreturn { ticket_id: currentItem.id, update: update, confidence: confidence };"
+      },
+      "id": "format-analysis",
+      "name": "Format Analysis Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "url": "=http://localhost:8080/api/v1/tickets/{{$json.ticket_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Token token={{$credentials.zammad_api_token}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "body": "={{JSON.stringify($json.update)}}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "update-ticket",
+      "name": "Update Zammad Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1750, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.confidence >= 80}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-approval",
+      "name": "Check Approval Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "amount": 3600,
+        "unit": "seconds"
+      },
+      "id": "wait-approval",
+      "name": "Wait for Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [2250, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Check ticket status after wait period\nconst ticketId = $json.ticket_id;\n\n// In production, fetch latest ticket status from Zammad\n// For demo, we'll check if action was set to 'approved'\n\n// This would be replaced with actual Zammad API call\nconst isApproved = false; // Would query Zammad\n\nreturn { ticket_id: ticketId, approved: isApproved };"
+      },
+      "id": "check-status",
+      "name": "Check Approval Status",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2500, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.approved}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "approval-branch",
+      "name": "Approval Branch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2750, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Execute remediation (placeholder)\n// In production, this would trigger actual remediation\n\nconst ticketId = $json.ticket_id;\n\n// Example: Block IP via firewall\n// executeFirewallBlock(sourceIP);\n\n// Example: Disable user account\n// disableUserAccount(username);\n\nreturn {\n  ticket_id: ticketId,\n  executed: true,\n  action: \"Remediation executed successfully\"\n};"
+      },
+      "id": "execute-remediation",
+      "name": "Execute Remediation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [3000, 100]
+    },
+    {
+      "parameters": {
+        "url": "=http://localhost:8080/api/v1/tickets/{{$json.ticket_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Token token={{$credentials.zammad_api_token}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "body": "={{JSON.stringify({\n  group: \"SOC-Approved\",\n  state: \"closed\",\n  custom_fields: {\n    soc_action: \"executed\",\n    soc_executed: true\n  },\n  article: {\n    body: \"Remediation executed automatically. Ticket closed.\",\n    type: \"note\",\n    sender: \"System\"\n  }\n})}}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "close-ticket",
+      "name": "Close Ticket (Executed)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [3250, 100]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [[{"node": "Get Pending Tickets", "type": "main", "index": 0}]]
+    },
+    "Get Pending Tickets": {
+      "main": [[{"node": "Loop Over Tickets", "type": "main", "index": 0}]]
+    },
+    "Loop Over Tickets": {
+      "main": [[{"node": "Get Wazuh Context", "type": "main", "index": 0}]]
+    },
+    "Get Wazuh Context": {
+      "main": [[{"node": "Deep AI Analysis", "type": "main", "index": 0}]]
+    },
+    "Deep AI Analysis": {
+      "main": [[{"node": "Format Analysis Results", "type": "main", "index": 0}]]
+    },
+    "Format Analysis Results": {
+      "main": [[{"node": "Update Zammad Ticket", "type": "main", "index": 0}]]
+    },
+    "Update Zammad Ticket": {
+      "main": [[{"node": "Check Approval Needed", "type": "main", "index": 0}]]
+    },
+    "Check Approval Needed": {
+      "main": [
+        [{"node": "Wait for Approval", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Wait for Approval": {
+      "main": [[{"node": "Check Approval Status", "type": "main", "index": 0}]]
+    },
+    "Check Approval Status": {
+      "main": [[{"node": "Approval Branch", "type": "main", "index": 0}]]
+    },
+    "Approval Branch": {
+      "main": [
+        [{"node": "Execute Remediation", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Execute Remediation": {
+      "main": [[{"node": "Close Ticket (Executed)", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["SOC", "AI", "Responder"],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-04T00:00:00.000Z",
+  "versionId": "1"
+}

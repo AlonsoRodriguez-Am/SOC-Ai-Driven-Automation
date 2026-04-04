@@ -1,0 +1,140 @@
+{
+  "name": "Agent 1: The Dispatcher",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wazuh-alert",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "wazuh-alert"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse Wazuh alert JSON\nconst alert = $json;\n\nconst parsed = {\n  timestamp: alert.timestamp,\n  rule_id: alert.rule?.id,\n  rule_level: alert.rule?.level,\n  rule_description: alert.rule?.description,\n  rule_groups: alert.rule?.groups,\n  mitre_id: alert.rule?.mitre?.id?.[0] || '',\n  mitre_tactic: alert.rule?.mitre?.tactic?.[0] || '',\n  agent_id: alert.agent?.id,\n  agent_name: alert.agent?.name,\n  manager: alert.manager?.name,\n  full_log: alert.full_log,\n  data: alert.data,\n  location: alert.location\n};\n\nreturn parsed;"
+      },
+      "id": "parse-alert",
+      "name": "Parse Alert",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent",
+        "authentication": "queryAuth",
+        "queryAuth": {
+          "addTokenTo": "url",
+          "key": "key",
+          "value": "={{$credentials.gemini_api_key}}"
+        },
+        "sendBody": true,
+        "body": "={{JSON.stringify({\n  contents: [{\n    parts: [{\n      text: \"Analyze this Wazuh security alert and generate a brief summary.\\n\\nAlert: \" + $json.rule_description + \"\\nLevel: \" + $json.rule_level + \"\\nAgent: \" + $json.agent_name + \"\\nMITRE: \" + $json.mitre_id + \" - \" + $json.mitre_tactic + \"\\n\\nProvide:\\n1. Severity assessment (Critical/High/Medium/Low)\\n2. Brief explanation\\n3. Recommended first response\"\n    }]\n  }]\n})}}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "gemini-analysis",
+      "name": "Gemini AI Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format ticket payload\nconst alert = $input.first().json.alert_data;\nconst aiResponse = $json.candidates?.[0]?.content?.parts?.[0]?.text || '';\n\nconst ticket = {\n  title: `Security Alert: ${alert.rule_description}`,\n  group: \"SOC-Alerts\",\n  state: \"new\",\n  priority: alert.rule_level >= 10 ? \"4\" : \"3\",\n  article: {\n    body: `Alert Analysis:\\n\\n${aiResponse}\\n\\n--- Technical Details ---\\nRule ID: ${alert.rule_id}\\nLevel: ${alert.rule_level}\\nAgent: ${alert.agent_name}\\nMITRE: ${alert.mitre_id} - ${alert.mitre_tactic}\\n\\nFull Log:\\n${alert.full_log}`,\n    type: \"note\",\n    sender: \"System\"\n  },\n  custom_fields: {\n    soc_alert_level: alert.rule_level,\n    soc_agent_id: alert.agent_id,\n    soc_rule_id: alert.rule_id,\n    soc_mitre_id: alert.mitre_id,\n    soc_mitre_tactic: alert.mitre_tactic,\n    soc_action: \"pending\",\n    soc_confidence: 0\n  }\n};\n\nreturn ticket;"
+      },
+      "id": "format-ticket",
+      "name": "Format Ticket Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8080/api/v1/tickets",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Token token={{$credentials.zammad_api_token}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "create-ticket",
+      "name": "Create Zammad Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "subject": "New Security Alert: {{$json.rule_description}}",
+        "to": "analyst@soc.local",
+        "body": "A new security alert has been created in Zammad.\\n\\nAlert: {{$json.rule_description}}\\nLevel: {{$json.rule_level}}\\nAgent: {{$json.agent_name}}\\n\\nPlease review in the SOC dashboard."
+      },
+      "id": "send-email",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1500, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({\"status\": \"success\", \"message\": \"Alert processed\"})}}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1750, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Parse Alert", "type": "main", "index": 0}]]
+    },
+    "Parse Alert": {
+      "main": [[{"node": "Gemini AI Analysis", "type": "main", "index": 0}]]
+    },
+    "Gemini AI Analysis": {
+      "main": [[{"node": "Format Ticket Data", "type": "main", "index": 0}]]
+    },
+    "Format Ticket Data": {
+      "main": [[{"node": "Create Zammad Ticket", "type": "main", "index": 0}]]
+    },
+    "Create Zammad Ticket": {
+      "main": [[{"node": "Send Email Notification", "type": "main", "index": 0}]]
+    },
+    "Send Email Notification": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["SOC", "Wazuh", "Alerts"],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-04T00:00:00.000Z",
+  "versionId": "1"
+}

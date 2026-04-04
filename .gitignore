@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+data/
+volumes/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.backup
+*.bak
+*.tar.gz
+*.zip
+
+# Secrets (do not commit)
+*secret*
+*password*
+*token*
+*.pem
+*.key
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Database files
+*.sqlite
+*.db
+*.sql
+
+# Compiled files
+*.class
+*.o
+*.so
+
+# Build outputs
+dist/
+build/
+target/

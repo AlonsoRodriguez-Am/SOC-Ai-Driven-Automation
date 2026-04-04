@@ -1,0 +1,214 @@
+{
+  "custom_fields": [
+    {
+      "name": "soc_proposal",
+      "display": "SOC Remediation Proposal",
+      "object": "Ticket",
+      "data_type": "textarea",
+      "data_option": {
+        "type": "text",
+        "rows": 5,
+        "maxlength": 5000,
+        "null": true
+      },
+      "editable": true,
+      "active": true,
+      "position": 1,
+      "description": "AI-generated remediation recommendation"
+    },
+    {
+      "name": "soc_confidence",
+      "display": "AI Confidence Score",
+      "object": "Ticket",
+      "data_type": "integer",
+      "data_option": {
+        "min": 0,
+        "max": 100,
+        "null": true
+      },
+      "editable": true,
+      "active": true,
+      "position": 2,
+      "description": "Confidence level of AI analysis (0-100%)"
+    },
+    {
+      "name": "soc_action",
+      "display": "SOC Action Status",
+      "object": "Ticket",
+      "data_type": "select",
+      "data_option": {
+        "options": [
+          { "name": "pending", "value": "pending" },
+          { "name": "approved", "value": "approved" },
+          { "name": "rejected", "value": "rejected" },
+          { "name": "executed", "value": "executed" }
+        ],
+        "default": "pending",
+        "null": true
+      },
+      "editable": true,
+      "active": true,
+      "position": 3,
+      "description": "Current action status in the SOC workflow"
+    },
+    {
+      "name": "soc_executed",
+      "display": "Remediation Executed",
+      "object": "Ticket",
+      "data_type": "boolean",
+      "data_option": {
+        "default": false,
+        "null": true
+      },
+      "editable": true,
+      "active": true,
+      "position": 4,
+      "description": "Whether automated remediation was executed"
+    },
+    {
+      "name": "soc_mitre_id",
+      "display": "MITRE ATT&CK Technique ID",
+      "object": "Ticket",
+      "data_type": "input",
+      "data_option": {
+        "type": "text",
+        "maxlength": 20,
+        "null": true
+      },
+      "editable": true,
+      "active": true,
+      "position": 5,
+      "description": "MITRE ATT&CK technique (e.g., T1110)"
+    },
+    {
+      "name": "soc_mitre_tactic",
+      "display": "MITRE ATT&CK Tactic",
+      "object": "Ticket",
+      "data_type": "input",
+      "data_option": {
+        "type": "text",
+        "maxlength": 100,
+        "null": true
+      },
+      "editable": true,
+      "active": true,
+      "position": 6,
+      "description": "MITRE ATT&CK tactic (e.g., Brute Force)"
+    },
+    {
+      "name": "soc_alert_level",
+      "display": "Wazuh Alert Level",
+      "object": "Ticket",
+      "data_type": "integer",
+      "data_option": {
+        "min": 0,
+        "max": 15,
+        "null": true
+      },
+      "editable": false,
+      "active": true,
+      "position": 7,
+      "description": "Original Wazuh alert severity level"
+    },
+    {
+      "name": "soc_agent_id",
+      "display": "Wazuh Agent ID",
+      "object": "Ticket",
+      "data_type": "input",
+      "data_option": {
+        "type": "text",
+        "maxlength": 50,
+        "null": true
+      },
+      "editable": false,
+      "active": true,
+      "position": 8,
+      "description": "Wazuh agent that generated the alert"
+    },
+    {
+      "name": "soc_source_ip",
+      "display": "Source IP Address",
+      "object": "Ticket",
+      "data_type": "input",
+      "data_option": {
+        "type": "text",
+        "maxlength": 45,
+        "null": true
+      },
+      "editable": false,
+      "active": true,
+      "position": 9,
+      "description": "Source IP of the security event"
+    },
+    {
+      "name": "soc_rule_id",
+      "display": "Wazuh Rule ID",
+      "object": "Ticket",
+      "data_type": "input",
+      "data_option": {
+        "type": "text",
+        "maxlength": 20,
+        "null": true
+      },
+      "editable": false,
+      "active": true,
+      "position": 10,
+      "description": "Wazuh rule that triggered the alert"
+    }
+  ],
+  "groups": [
+    {
+      "name": "SOC-Alerts",
+      "description": "New security alerts requiring triage",
+      "signature": "SOC Automation System"
+    },
+    {
+      "name": "SOC-Triage",
+      "description": "Alerts under active analysis",
+      "signature": "SOC Triage Team"
+    },
+    {
+      "name": "SOC-Approved",
+      "description": "Approved for automated remediation",
+      "signature": "SOC Remediation System"
+    },
+    {
+      "name": "SOC-FP",
+      "description": "Confirmed false positives",
+      "signature": "SOC Analysis Team"
+    }
+  ],
+  "states": [
+    {
+      "name": "new",
+      "state_type": "new",
+      "default_follow_up": "open"
+    },
+    {
+      "name": "open",
+      "state_type": "open",
+      "default_follow_up": "pending"
+    },
+    {
+      "name": "pending",
+      "state_type": "pending",
+      "default_follow_up": "open"
+    },
+    {
+      "name": "solved",
+      "state_type": "closed",
+      "default_follow_up": "solved"
+    },
+    {
+      "name": "closed",
+      "state_type": "closed",
+      "default_follow_up": "closed"
+    }
+  ],
+  "priority": {
+    "1": "low",
+    "2": "normal",
+    "3": "high",
+    "4": "urgent"
+  }
+}

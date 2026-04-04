@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: soc-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=SOC_Automation_2026!
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/New_York
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=168
+      - NODE_ENV=production
+      - EXECUTIONS_TIMEOUT=600
+      - EXECUTIONS_TIMEOUT_MAX=3600
+    volumes:
+      - ./data:/home/node/.n8n
+      - ./data/n8n-files:/home/node/.n8n-files
+    networks:
+      - soc-net
+
+networks:
+  soc-net:
+    driver: bridge
