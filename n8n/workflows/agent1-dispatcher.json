@@ -4,7 +4,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "",
+        "path": "agent1-dispatcher",
         "responseMode": "lastNode"
       },
       "id": "webhook1",
@@ -26,26 +26,28 @@
     },
     {
       "parameters": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name": "Content-Type", "value": "application/json"}
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Authorization", "value": "Bearer YOUR_GROQ_API_KEY"}
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 1024 } } }}"
+        "jsonBody": "={{ { model: \"llama-3.3-70b-versatile\", messages: [{ role: \"user\", content: $json.prompt }], temperature: 0.2, max_tokens: 1024 } }}"
       },
-      "id": "geminiReq",
-      "name": "Gemini AI",
+      "id": "groqReq",
+      "name": "Groq AI",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [750, 300]
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.item.json;\nlet summary = { summary: 'No AI response', iocs: [], immediate_actions: [], severity_assessment: 'Unknown' };\n\ntry {\n  if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {\n    const text = data.candidates[0].content.parts[0].text;\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) summary = JSON.parse(match[0]);\n  }\n} catch (e) {\n  summary.summary = 'Error parsing AI response: ' + e.message;\n}\n\nreturn { json: summary };"
+        "jsCode": "const data = $input.item.json;\nlet summary = { summary: 'No AI response', iocs: [], immediate_actions: [], severity_assessment: 'Unknown' };\n\ntry {\n  if (data.choices && data.choices[0]?.message?.content) {\n    const text = data.choices[0].message.content;\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) summary = JSON.parse(match[0]);\n  }\n} catch (e) {\n  summary.summary = 'Error parsing AI response: ' + e.message;\n}\n\nreturn { json: summary };"
       },
       "id": "parseResp",
       "name": "Parse Response",
@@ -55,17 +57,18 @@
     },
     {
       "parameters": {
-        "url": "http://localhost:8080/api/v1/tickets.json",
+        "method": "POST",
+        "url": "http://172.19.0.1:8080/api/v1/tickets.json",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {"name": "Content-Type", "value": "application/json"},
-            {"name": "Authorization", "value": "Token token=YOUR_ZAMMAD_TOKEN"}
+            {"name": "Authorization", "value": "Token token=gDn8CTyngGoLLkXHqlzZQ0TvkAx_JX_BzpIqCC2IrrCXlx3fQRJwkrBJSC1jKB4j"}
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { ticket: { title: '[ESTHEROIDS] ' + $('Parse Alert').item.json.alertData.rule_description, group: 'Users', priority: $('Parse Alert').item.json.alertData.priority, state: 'new', article: { body: '<h3>SOC Alert Briefing</h3><p>' + $('Parse Response').item.json.summary + '</p><hr><p><strong>Severity:</strong> ' + $('Parse Alert').item.json.alertData.severity + '/15</p><p><strong>Host:</strong> ' + $('Parse Alert').item.json.alertData.hostname + '</p><p><strong>Source IP:</strong> ' + $('Parse Alert').item.json.alertData.source_ip + '</p><p><strong>Destination IP:</strong> ' + $('Parse Alert').item.json.alertData.dest_ip + '</p><hr><p><strong>IOCs:</strong> ' + ($('Parse Response').item.json.iocs || []).join(', ') + '</p><p><strong>Immediate Actions:</strong> ' + ($('Parse Response').item.json.immediate_actions || []).join(', ') + '</p><p><strong>Assessment:</strong> ' + ($('Parse Response').item.json.severity_assessment || 'N/A') + '</p>', content_type: 'text/html' } } } }}"
+        "jsonBody": "={{ { title: '[ESTHEROIDS] ' + $('Parse Alert').item.json.alertData.rule_description, group_id: 1, customer_id: 2, priority_id: $('Parse Alert').item.json.alertData.priority, state: 'new', article: { body: '<h3>SOC Alert Briefing</h3><p>' + $('Parse Response').item.json.summary + '</p><hr><p><strong>Severity:</strong> ' + $('Parse Alert').item.json.alertData.severity + '/15</p><p><strong>Host:</strong> ' + $('Parse Alert').item.json.alertData.hostname + '</p><p><strong>Source IP:</strong> ' + $('Parse Alert').item.json.alertData.source_ip + '</p><p><strong>Destination IP:</strong> ' + $('Parse Alert').item.json.alertData.dest_ip + '</p><hr><p><strong>IOCs:</strong> ' + ($('Parse Response').item.json.iocs || []).join(', ') + '</p><p><strong>Immediate Actions:</strong> ' + ($('Parse Response').item.json.immediate_actions || []).join(', ') + '</p><p><strong>Assessment:</strong> ' + ($('Parse Response').item.json.severity_assessment || 'N/A') + '</p>', content_type: 'text/html' } } }}"
       },
       "id": "zammad1",
       "name": "Create Zammad Ticket",
@@ -76,8 +79,8 @@
   ],
   "connections": {
     "Webhook": {"main": [[{"node": "Parse Alert", "type": "main", "index": 0}]]},
-    "Parse Alert": {"main": [[{"node": "Gemini AI", "type": "main", "index": 0}]]},
-    "Gemini AI": {"main": [[{"node": "Parse Response", "type": "main", "index": 0}]]},
+    "Parse Alert": {"main": [[{"node": "Groq AI", "type": "main", "index": 0}]]},
+    "Groq AI": {"main": [[{"node": "Parse Response", "type": "main", "index": 0}]]},
     "Parse Response": {"main": [[{"node": "Create Zammad Ticket", "type": "main", "index": 0}]]}
   },
   "settings": {}

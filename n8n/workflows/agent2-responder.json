@@ -4,7 +4,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "",
+        "path": "agent2-responder",
         "responseMode": "lastNode"
       },
       "id": "webhook1",
@@ -36,26 +36,28 @@
     },
     {
       "parameters": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name": "Content-Type", "value": "application/json"}
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Authorization", "value": "Bearer YOUR_GROQ_API_KEY"}
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2048 } } }}"
+        "jsonBody": "={{ { model: \"llama-3.3-70b-versatile\", messages: [{ role: \"user\", content: $json.prompt }], temperature: 0.3, max_tokens: 2048 } }}"
       },
-      "id": "geminiReq",
-      "name": "Gemini Deep Analysis",
+      "id": "groqReq",
+      "name": "Groq Deep Analysis",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1000, 300]
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.item.json;\nlet analysis = {\n  threat_intent: 'No AI response',\n  blast_radius: { affected_systems: [], scope: 'unknown', data_at_risk: [] },\n  mitre_attack: { primary_technique: 'N/A', techniques: [], tactics: [] },\n  remediation_options: [],\n  recommended_action: 'None',\n  confidence_score: 0,\n  inconclusive: true\n};\n\ntry {\n  if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {\n    const text = data.candidates[0].content.parts[0].text;\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) analysis = JSON.parse(match[0]);\n  }\n} catch (e) {\n  analysis.threat_intent = 'Error parsing AI response: ' + e.message;\n}\n\nreturn { json: analysis };"
+        "jsCode": "const data = $input.item.json;\nlet analysis = {\n  threat_intent: 'No AI response',\n  blast_radius: { affected_systems: [], scope: 'unknown', data_at_risk: [] },\n  mitre_attack: { primary_technique: 'N/A', techniques: [], tactics: [] },\n  remediation_options: [],\n  recommended_action: 'None',\n  confidence_score: 0,\n  inconclusive: true\n};\n\ntry {\n  if (data.choices && data.choices[0]?.message?.content) {\n    const text = data.choices[0].message.content;\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) analysis = JSON.parse(match[0]);\n  }\n} catch (e) {\n  analysis.threat_intent = 'Error parsing AI response: ' + e.message;\n}\n\nreturn { json: analysis };"
       },
       "id": "parse1",
       "name": "Parse Analysis",
@@ -65,7 +67,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const analysis = $input.item.json;\nconst alertData = $('Parse Alert').item.json.alertData;\n\nconst remediationHtml = analysis.remediation_options.map((r, i) => \n  '<li><strong>' + (i + 1) + '. ' + r.action + '</strong><br>Description: ' + r.description + '<br>Impact: ' + r.impact + '<br>Confidence: ' + ((r.confidence || 0) * 100).toFixed(0) + '%</li>'\n).join('');\n\nconst blastRadiusHtml = '<p><strong>Affected Systems:</strong> ' + (analysis.blast_radius.affected_systems.join(', ') || 'None identified') + '</p><p><strong>Scope:</strong> ' + analysis.blast_radius.scope + '</p><p><strong>Data at Risk:</strong> ' + (analysis.blast_radius.data_at_risk.join(', ') || 'None identified') + '</p>';\n\nconst mitreHtml = '<p><strong>Primary Technique:</strong> ' + analysis.mitre_attack.primary_technique + '</p><p><strong>Tactics:</strong> ' + (analysis.mitre_attack.tactics.join(', ') || 'N/A') + '</p><p><strong>Techniques:</strong> ' + (analysis.mitre_attack.techniques.join(', ') || 'N/A') + '</p>';\n\nconst body = '<h2>Deep Threat Analysis Report</h2><h3>Alert Details</h3><p><strong>Rule:</strong> ' + alertData.rule_description + '</p><p><strong>Severity:</strong> ' + alertData.severity + '/15</p><p><strong>Host:</strong> ' + alertData.hostname + '</p><p><strong>Source IP:</strong> ' + alertData.source_ip + '</p><p><strong>Destination IP:</strong> ' + alertData.dest_ip + '</p><h3>Threat Intent</h3><p>' + analysis.threat_intent + '</p><h3>Blast Radius Assessment</h3>' + blastRadiusHtml + '<h3>MITRE ATT&CK Mapping</h3>' + mitreHtml + '<h3>Remediation Options</h3><ol>' + (remediationHtml || '<li>No options generated</li>') + '</ol><h3>Recommended Action</h3><p><strong>' + analysis.recommended_action + '</strong></p><h3>Analysis Confidence</h3><p>Confidence Score: ' + ((analysis.confidence_score || 0) * 100).toFixed(0) + '%</p><p>Status: ' + (analysis.inconclusive ? 'INCONCLUSIVE - Requires manual forensic investigation' : 'Analysis Complete') + '</p><hr><p><small>Generated by SOC AI Automation - Agent 2: Threat Responder</small></p>';\n\nreturn { json: { body } };"
+        "jsCode": "const analysis = $input.item.json;\nconst alertData = $('Parse Alert').item.json.alertData;\n\nconst remediationHtml = analysis.remediation_options.map((r, i) => \n  '<li><strong>' + (i + 1) + '. ' + r.action + '</strong><br>Description: ' + r.description + '<br>Impact: ' + r.impact + '<br>Confidence: ' + ((r.confidence || 0) * 100).toFixed(0) + '%</li>'\n).join('');\n\nconst blastRadiusHtml = '<p><strong>Affected Systems:</strong> ' + (analysis.blast_radius.affected_systems.join(', ') || 'None identified') + '</p><p><strong>Scope:</strong> ' + analysis.blast_radius.scope + '</p><p><strong>Data at Risk:</strong> ' + (analysis.blast_radius.data_at_risk.join(', ') || 'None identified') + '</p>';\n\nconst mitreHtml = '<p><strong>Primary Technique:</strong> ' + analysis.mitre_attack.primary_technique + '</p><p><strong>Tactics:</strong> ' + (analysis.mitre_attack.tactics.join(', ') || 'N/A') + '</p><p><strong>Techniques:</strong> ' + (analysis.mitre_attack.techniques.join(', ') || 'N/A') + '</p>';\n\nconst body = '<h2>Deep Threat Analysis Report</h2><h3>Alert Details</h3><p><strong>Rule:</strong> ' + alertData.rule_description + '</p><p><strong>Severity:</strong> ' + alertData.severity + '/15</p><p><strong>Host:</strong> ' + alertData.hostname + '</p><p><strong>Source IP:</strong> ' + alertData.source_ip + '</p><p><strong>Destination IP:</strong> ' + alertData.dest_ip + '</p><h3>Threat Intent</h3><p>' + analysis.threat_intent + '</p><h3>Blast Radius Assessment</h3>' + blastRadiusHtml + '<h3>MITRE ATT&CK Mapping</h3>' + mitreHtml + '<h3>Remediation Options</h3><ol>' + (remediationHtml || '<li>No options generated</li>') + '</ol><h3>Recommended Action</h3><p><strong>' + analysis.recommended_action + '</strong></p><h3>Analysis Confidence</h3><p>Confidence Score: ' + ((analysis.confidence_score || 0) * 100).toFixed(0) + '%</p><p>Status: ' + (analysis.inconclusive ? 'INCONCLUSIVE - Requires manual forensic investigation' : 'Analysis Complete') + '</p><hr><p>Generated by SOC AI-Driven Automation using Groq AI</p>';\n\nreturn { json: { body } };"
       },
       "id": "format1",
       "name": "Format Report",
@@ -75,17 +77,18 @@
     },
     {
       "parameters": {
-        "url": "http://localhost:8080/api/v1/tickets.json",
+        "method": "POST",
+        "url": "http://172.19.0.1:8080/api/v1/tickets.json",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {"name": "Content-Type", "value": "application/json"},
-            {"name": "Authorization", "value": "Token token=YOUR_ZAMMAD_TOKEN"}
+            {"name": "Authorization", "value": "Token token=gDn8CTyngGoLLkXHqlzZQ0TvkAx_JX_BzpIqCC2IrrCXlx3fQRJwkrBJSC1jKB4j"}
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { ticket: { title: '[DEEP ANALYSIS] ' + $('Parse Alert').item.json.alertData.rule_description, group: 'Users', priority: $('Parse Alert').item.json.alertData.priority, state: 'open', article: { body: $('Format Report').item.json.body, content_type: 'text/html' } } } }}"
+        "jsonBody": "={{ { title: '[DEEP ANALYSIS] ' + $('Parse Alert').item.json.alertData.rule_description, group_id: 1, customer_id: 2, priority_id: $('Parse Alert').item.json.alertData.priority, state: 'open', article: { body: $('Format Report').item.json.body, content_type: 'text/html' } } }}"
       },
       "id": "zammad1",
       "name": "Create Zammad Ticket",
@@ -97,8 +100,8 @@
   "connections": {
     "Webhook": {"main": [[{"node": "Parse Alert", "type": "main", "index": 0}]]},
     "Parse Alert": {"main": [[{"node": "Deep Analysis Prompt", "type": "main", "index": 0}]]},
-    "Deep Analysis Prompt": {"main": [[{"node": "Gemini Deep Analysis", "type": "main", "index": 0}]]},
-    "Gemini Deep Analysis": {"main": [[{"node": "Parse Analysis", "type": "main", "index": 0}]]},
+    "Deep Analysis Prompt": {"main": [[{"node": "Groq Deep Analysis", "type": "main", "index": 0}]]},
+    "Groq Deep Analysis": {"main": [[{"node": "Parse Analysis", "type": "main", "index": 0}]]},
     "Parse Analysis": {"main": [[{"node": "Format Report", "type": "main", "index": 0}]]},
     "Format Report": {"main": [[{"node": "Create Zammad Ticket", "type": "main", "index": 0}]]}
   },
