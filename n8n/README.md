@@ -11,8 +11,9 @@
 n8n is the workflow orchestration engine for the SOC Automation system:
 - **Workflow Creation** - Visual automation pipelines
 - **Webhook Triggers** - Receive Wazuh alerts in real-time
-- **API Integration** - Connect to Wazuh, Zammad, Gemini
+- **API Integration** - Connect to Wazuh, Zammad, Groq AI
 - **Schedule Triggers** - Poll for alerts if webhooks unavailable
+- **Autonomous Response** - AI-driven CVE analysis and auto-resolution
 
 ---
 
@@ -165,16 +166,16 @@ Create these in **Settings → Credentials**:
 | Header Value | `Token token=YOUR_TOKEN` |
 | URL | `http://localhost:8080/api/v1` |
 
-#### 3. Gemini API
+#### 3. Groq API
 
 | Field | Value |
 |-------|-------|
-| Name | `gemini-api` |
+| Name | `groq-api` |
 | Type | HTTP Request |
-| Auth | Query Parameter |
-| Query Parameter Name | `key` |
-| Query Parameter Value | `YOUR_API_KEY` |
-| URL | `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent` |
+| Auth | Header |
+| Header Name | `Authorization` |
+| Header Value | `Bearer INSERT_YOUR_GROQ_API_KEY` |
+| URL | `https://api.groq.com/openai/v1/chat/completions` |
 
 #### 4. Gmail SMTP
 
@@ -217,39 +218,48 @@ echo $TOKEN
 
 ### Agent 1: The Dispatcher
 
-**Purpose:** Receive Wazuh alerts, generate summaries, create tickets
+**Purpose:** Receive Wazuh alerts, generate summaries with CVE analysis, create tickets
 
 **Flow:**
 ```
-1. Webhook Trigger (POST /wazuh-alert)
-2. Function Node (Parse alert)
-3. HTTP Request (Get additional context from Wazuh API)
-4. HTTP Request (Call Gemini AI for alert summary)
-5. Function Node (Format ticket data)
-6. HTTP Request (Create Zammad ticket)
-7. Email Node (Send notification)
-8. Respond to Webhook
+1. Webhook Trigger (POST /agent1-dispatcher)
+2. Function Node (Parse alert, calculate priority)
+3. HTTP Request (Call Groq AI for alert summary + CVE identification)
+4. Function Node (Extract JSON from AI response)
+5. HTTP Request (Create Zammad ticket with vulnerability intelligence)
+6. Respond to Webhook
 ```
+
+**Key Features:**
+- AI identifies related CVEs for each alert type
+- Provides CVE explanations and mitigations
+- Uses Zammad API v2 format (group_id, customer_id, priority_id)
+- Priority: ≥12 severity = P1, ≥7 = P2, else P3
 
 ### Agent 2: The Responder
 
-**Purpose:** Deep analysis, MITRE mapping, remediation proposal
+**Purpose:** Deep analysis, CVE correlation, autonomous remediation
 
 **Flow:**
 ```
-1. Schedule Trigger (Every 5 minutes)
-2. HTTP Request (Get pending tickets from Zammad)
-3. Loop over tickets
-4. HTTP Request (Get alert details from Wazuh)
-5. HTTP Request (Call Gemini for analysis)
-6. Function Node (Format analysis results)
-7. HTTP Request (Update Zammad ticket)
-8. If Confidence > 80%: Wait for approval
-9. IF Approved: Execute remediation
-10. Update ticket with results
+1. Webhook Trigger (POST /agent2-responder)
+2. Function Node (Parse alert data)
+3. HTTP Request (Call Groq AI for deep threat analysis)
+4. Function Node (Extract analysis with confidence score)
+5. Function Node (Format HTML report with CVEs)
+6. HTTP Request (Create/update Zammad ticket with analysis)
+7. Auto-close if confidence >= 80% and not inconclusive
 ```
 
+**Key Features:**
+- Confidence score determines automation level
+- Auto-resolves when confidence ≥80% and conclusive
+- CVE analysis with host-specific mitigations
+- Remediation options with confidence percentages
+
 ---
+
+## Autonomous Response Configuration
 
 ## Webhook Configuration
 
@@ -383,6 +393,47 @@ environment:
   - EXECUTIONS_TIMEOUT=600
   - EXECUTIONS_TIMEOUT_MAX=3600
 ```
+
+### "Unknown resource ticket" Error
+
+This error occurs when using the old Zammad API v1 format. The v2 format does NOT use the `ticket: {}` wrapper.
+
+**Incorrect (v1):**
+```json
+{ "ticket": { "title": "Alert", "group": "Users", ... } }
+```
+
+**Correct (v2):**
+```json
+{ "title": "Alert", "group_id": 1, "customer_id": 2, "priority_id": 2, ... }
+```
+
+In workflow JSON files, ensure the jsonBody follows the v2 format without the `ticket` wrapper.
+
+### Docker Network Connectivity
+
+When n8n runs in Docker and needs to reach Zammad (also in Docker), use the host machine's Docker bridge IP instead of `localhost`:
+
+- **Working:** `http://172.19.0.1:8080/api/v1/tickets.json`
+- **Fails:** `http://localhost:8080/api/v1/tickets.json`
+
+Find your bridge IP with: `ip addr show docker0 | grep inet`
+
+### Database Lock Issues
+
+If you see "Driver has already been released" errors:
+1. Stop n8n: `docker stop soc-n8n`
+2. Remove locks: `rm -f ./data/database.sqlite-shm ./data/database.sqlite-wal`
+3. Start n8n: `docker start soc-n8n`
+
+### API Key Placeholders
+
+All workflow JSON files use placeholders. Replace before deployment:
+
+| Placeholder | Replace With |
+|-------------|--------------|
+| `INSERT_YOUR_GROQ_API_KEY` | Your Groq API key (get from console.groq.com) |
+| `INSERT_YOUR_ZAMMAD_API_TOKEN` | Your Zammad API token (Settings → API) |
 
 ---
 

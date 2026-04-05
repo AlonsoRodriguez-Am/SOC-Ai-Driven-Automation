@@ -249,7 +249,7 @@ This project was migrated from Google Gemini to Groq (Llama 3.3 70B Versatile) f
 
 **Required configuration:**
 - Groq API key must be added to each workflow JSON file
-- Placeholder: `YOUR_GROQ_API_KEY` (replace with actual key)
+- Placeholder: `INSERT_YOUR_GROQ_API_KEY` (replace with actual key)
 - API Endpoint: `https://api.groq.com/openai/v1/chat/completions`
 - Model: `llama-3.3-70b-versatile`
 
@@ -296,6 +296,37 @@ Zammad URL: http://172.19.0.1:8080/api/v1/tickets.json
 ```
 
 Replace `172.19.0.1` with your actual Docker bridge network IP if different.
+
+### Autonomous Response Capabilities
+
+The system now includes autonomous response capabilities with AI-driven CVE analysis and auto-resolution:
+
+**Agent 1: Alert Dispatcher**
+- Receives Wazuh alerts via webhook
+- AI (Groq Llama 3.3) generates alert summary with CVE identification
+- Creates Zammad ticket with vulnerability intelligence
+- Assigns priority based on severity (≥12: P1, ≥7: P2, else: P3)
+
+**Agent 2: Threat Responder**
+- Performs deep threat analysis with CVE correlation
+- Calculates confidence score (0-100%)
+- Auto-closes tickets when confidence ≥80% and not inconclusive
+- Provides remediation options with confidence percentages
+
+**CVE Intelligence Features:**
+- AI identifies related CVEs for each alert type
+- Provides CVE explanations and host-specific mitigations
+- Tracks CVEs in Zammad via `soc_cve_list` custom field
+- Integrates into ticket body for analyst review
+
+**Auto-Resolution Logic:**
+```json
+{
+  "confidence_score": 0.85,
+  "inconclusive": false
+}
+```
+If `confidence_score >= 0.8` AND `inconclusive === false`, the system can auto-resolve the ticket.
 
 ---
 

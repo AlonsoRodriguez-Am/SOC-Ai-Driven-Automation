@@ -174,7 +174,7 @@ The workflows use the Groq API for AI analysis. API key is stored in each workfl
 
 To update the API key, edit each workflow JSON file and replace the Bearer token.
 
-**Current working key:** `YOUR_GROQ_API_KEY`
+**Current working key:** `INSERT_YOUR_GROQ_API_KEY`
 
 ---
 
@@ -183,7 +183,7 @@ To update the API key, edit each workflow JSON file and replace the Bearer token
 Tickets are created via Zammad API:
 
 - **URL:** `http://localhost:8080/api/v1/tickets.json`
-- **Token:** `gziXncENKQsMysbqwRc3RZ2LqZMQ6MNh8DNvPSXtTka3nZUqbREu2hbDg067bh`
+- **Token:** `INSERT_YOUR_ZAMMAD_API_TOKEN`
 
 ---
 

@@ -26,7 +26,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $input.item.json;\nif (d.skip) return [];\n\nconst prompt = 'You are a Tier 2 SOC Analyst. Summarize this security alert in a concise, professional briefing for an on-call engineer.\\n\\nAlert Details:\\n- Rule: ' + (d.rule_description || 'N/A') + '\\n- Rule ID: ' + (d.rule_id || 'N/A') + '\\n- Severity: ' + d.severity + '/15\\n- Source IP: ' + d.source_ip + '\\n- Destination IP: ' + d.dest_ip + '\\n- Affected Host: ' + d.hostname + '\\n- Timestamp: ' + d.timestamp + '\\n- MITRE ATT&CK: ' + (d.mitre_tactics || 'N/A') + '\\n- Groups: ' + (d.groups || 'N/A') + '\\n- Full Log: ' + (d.full_log?.substring(0, 800) || 'N/A') + '\\n\\nProvide a JSON response with:\\n{\\n  \"summary\": \"Executive Summary (2-3 sentences)\",\\n  \"iocs\": [\"array of IPs, hashes, domains\"],\\n  \"immediate_actions\": [\"recommended actions if any\"],\\n  \"severity_assessment\": \"Assessment\"\\n}\\n\\nFormat: Professional, clinical tone. No speculation. JSON only.';\n\n\nreturn { json: { prompt } };"
+        "jsCode": "const d = $input.item.json;\nif (d.skip) return [];\n\nconst prompt = 'You are a Tier 2 SOC Analyst. Summarize this security alert in a concise, professional briefing for an on-call engineer.\\n\\nAlert Details:\\n- Rule: ' + (d.rule_description || 'N/A') + '\\n- Rule ID: ' + (d.rule_id || 'N/A') + '\\n- Severity: ' + d.severity + '/15\\n- Source IP: ' + d.source_ip + '\\n- Destination IP: ' + d.dest_ip + '\\n- Affected Host: ' + d.hostname + '\\n- Timestamp: ' + d.timestamp + '\\n- MITRE ATT&CK: ' + (d.mitre_tactics || 'N/A') + '\\n- Groups: ' + (d.groups || 'N/A') + '\\n- Full Log: ' + (d.full_log?.substring(0, 800) || 'N/A') + '\\n\\nProvide a JSON response with:\\n{\\n  \"summary\": \"Executive Summary (2-3 sentences)\",\\n  \"iocs\": [\"array of IPs, hashes, domains\"],\\n  \"immediate_actions\": [\"recommended actions if any\"],\\n  \"severity_assessment\": \"Assessment\"\\n}\\n\\nFormat: Professional, clinical tone. No speculation. JSON only.';\n\nreturn { json: { prompt } };"
       },
       "id": "groqPrep",
       "name": "Prepare Groq",
@@ -36,18 +36,17 @@
     },
     {
       "parameters": {
-        "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {"name": "Content-Type", "value": "application/json"},
-            {"name": "Authorization", "value": "Bearer YOUR_GROQ_API_KEY"}
+            {"name": "Authorization", "value": "Bearer INSERT_YOUR_GROQ_API_KEY"}
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { model: \"llama-3.3-70b-versatile\", messages: [{ role: \"user\", content: $json.prompt }], temperature: 0.2, max_tokens: 800 } }}"
+        "jsonBody": "={{ { model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: $json.prompt }], temperature: 0.2, max_tokens: 800 } }}"
       },
       "id": "groqReq",
       "name": "Groq AI",
@@ -67,18 +66,17 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://172.19.0.1:8080/api/v1/tickets.json",
+        "url": "http://localhost:8080/api/v1/tickets.json",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {"name": "Content-Type", "value": "application/json"},
-            {"name": "Authorization", "value": "Token token=gDn8CTyngGoLLkXHqlzZQ0TvkAx_JX_BzpIqCC2IrrCXlx3fQRJwkrBJSC1jKB4j"}
+            {"name": "Authorization", "value": "Token token=INSERT_YOUR_ZAMMAD_API_TOKEN"}
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { title: '[WAZUH] ' + $('Parse Alert').item.json.rule_description, group_id: 1, customer_id: 2, priority_id: $('Parse Alert').item.json.priority, state: 'new', article: { body: '<h3>SOC Alert Briefing</h3><p>' + $('Parse Response').item.json.summary + '</p><hr><p><strong>Severity:</strong> ' + $('Parse Alert').item.json.severity + '/15</p><p><strong>Host:</strong> ' + $('Parse Alert').item.json.hostname + '</p><p><strong>Source IP:</strong> ' + $('Parse Alert').item.json.source_ip + '</p><p><strong>Rule ID:</strong> ' + $('Parse Alert').item.json.rule_id + '</p><hr><p><strong>IOCs:</strong> ' + ($('Parse Response').item.json.iocs || []).join(', ') + '</p><p><strong>Immediate Actions:</strong> ' + ($('Parse Response').item.json.immediate_actions || []).join(', ') + '</p><p><strong>Assessment:</strong> ' + ($('Parse Response').item.json.severity_assessment || 'N/A') + '</p>', content_type: 'text/html' } } }}"
+        "jsonBody": "={{ { ticket: { title: '[WAZUH] ' + $('Parse Alert').item.json.rule_description, group: 'Users', priority: $('Parse Alert').item.json.priority, state: 'new', article: { body: '<h3>SOC Alert Briefing</h3><p>' + $('Parse Response').item.json.summary + '</p><hr><p><strong>Severity:</strong> ' + $('Parse Alert').item.json.severity + '/15</p><p><strong>Host:</strong> ' + $('Parse Alert').item.json.hostname + '</p><p><strong>Source IP:</strong> ' + $('Parse Alert').item.json.source_ip + '</p><p><strong>Rule ID:</strong> ' + $('Parse Alert').item.json.rule_id + '</p><hr><p><strong>IOCs:</strong> ' + ($('Parse Response').item.json.iocs || []).join(', ') + '</p><p><strong>Immediate Actions:</strong> ' + ($('Parse Response').item.json.immediate_actions || []).join(', ') + '</p><p><strong>Assessment:</strong> ' + ($('Parse Response').item.json.severity_assessment || 'N/A') + '</p>', content_type: 'text/html' } } } }}"
       },
       "id": "zammad1",
       "name": "Create Zammad Ticket",

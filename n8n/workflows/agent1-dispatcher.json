@@ -26,13 +26,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {"name": "Content-Type", "value": "application/json"},
-            {"name": "Authorization", "value": "Bearer YOUR_GROQ_API_KEY"}
+            {"name": "Authorization", "value": "Bearer INSERT_YOUR_GROQ_API_KEY"}
           ]
         },
         "sendBody": true,
@@ -57,18 +56,17 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://172.19.0.1:8080/api/v1/tickets.json",
+        "url": "http://localhost:8080/api/v1/tickets.json",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {"name": "Content-Type", "value": "application/json"},
-            {"name": "Authorization", "value": "Token token=gDn8CTyngGoLLkXHqlzZQ0TvkAx_JX_BzpIqCC2IrrCXlx3fQRJwkrBJSC1jKB4j"}
+            {"name": "Authorization", "value": "Token token=INSERT_YOUR_ZAMMAD_API_TOKEN"}
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { title: '[ESTHEROIDS] ' + $('Parse Alert').item.json.alertData.rule_description, group_id: 1, customer_id: 2, priority_id: $('Parse Alert').item.json.alertData.priority, state: 'new', article: { body: '<h3>SOC Alert Briefing</h3><p>' + $('Parse Response').item.json.summary + '</p><hr><p><strong>Severity:</strong> ' + $('Parse Alert').item.json.alertData.severity + '/15</p><p><strong>Host:</strong> ' + $('Parse Alert').item.json.alertData.hostname + '</p><p><strong>Source IP:</strong> ' + $('Parse Alert').item.json.alertData.source_ip + '</p><p><strong>Destination IP:</strong> ' + $('Parse Alert').item.json.alertData.dest_ip + '</p><hr><p><strong>IOCs:</strong> ' + ($('Parse Response').item.json.iocs || []).join(', ') + '</p><p><strong>Immediate Actions:</strong> ' + ($('Parse Response').item.json.immediate_actions || []).join(', ') + '</p><p><strong>Assessment:</strong> ' + ($('Parse Response').item.json.severity_assessment || 'N/A') + '</p>', content_type: 'text/html' } } }}"
+        "jsonBody": "={{ { ticket: { title: '[ESTHEROIDS] ' + $('Parse Alert').item.json.alertData.rule_description, group: 'Users', priority: $('Parse Alert').item.json.alertData.priority, state: 'new', article: { body: '<h3>SOC Alert Briefing</h3><p>' + $('Parse Response').item.json.summary + '</p><hr><p><strong>Severity:</strong> ' + $('Parse Alert').item.json.alertData.severity + '/15</p><p><strong>Host:</strong> ' + $('Parse Alert').item.json.alertData.hostname + '</p><p><strong>Source IP:</strong> ' + $('Parse Alert').item.json.alertData.source_ip + '</p><p><strong>Destination IP:</strong> ' + $('Parse Alert').item.json.alertData.dest_ip + '</p><hr><p><strong>IOCs:</strong> ' + ($('Parse Response').item.json.iocs || []).join(', ') + '</p><p><strong>Immediate Actions:</strong> ' + ($('Parse Response').item.json.immediate_actions || []).join(', ') + '</p><p><strong>Assessment:</strong> ' + ($('Parse Response').item.json.severity_assessment || 'N/A') + '</p>', content_type: 'text/html' } } } }}"
       },
       "id": "zammad1",
       "name": "Create Zammad Ticket",
