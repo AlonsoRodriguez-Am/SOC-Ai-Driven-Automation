@@ -321,12 +321,39 @@ chmod -R 777 ./data
 docker restart soc-n8n
 ```
 
-### v2.x API Issues
+### v2.x Critical Requirements
 
-Important notes for n8n v2.x:
-- Cannot set `active`, `tags`, `updatedAt`, `versionId` via API
-- Use node type `n8n-nodes-base.webhook`
-- Create workflows via UI, not API import
+**IMPORTANT:** n8n v2.x has breaking changes from v1.x:
+
+1. **Webhook Nodes Must Use `typeVersion: 2`**
+   ```json
+   {
+     "type": "n8n-nodes-base.webhook",
+     "typeVersion": 2,  // MUST be 2, not 1
+     ...
+   }
+   ```
+
+2. **API Limitations**
+   - Cannot set `active`, `tags`, `updatedAt`, `versionId` via API
+   - Use `/activate` endpoint to activate workflows
+   - Webhook paths should be configured in the UI (keep path empty in JSON)
+
+3. **File Access Restrictions**
+   - Read Binary File node restricted to paths in `N8N_RESTRICT_FILE_ACCESS_TO`
+   - Set environment variable to allow file access:
+     ```yaml
+     environment:
+       - N8N_RESTRICT_FILE_ACCESS_TO=/home/node/.n8n-files
+     ```
+
+4. **Database Schema Changes**
+   - User table requires `role` column
+   - Add with: `ALTER TABLE user ADD COLUMN role varchar;`
+
+5. **Duplicate Webhook Paths**
+   - Each workflow must have unique webhook path
+   - Multiple workflows with same path causes registration conflicts
 
 ### File Access Issues
 

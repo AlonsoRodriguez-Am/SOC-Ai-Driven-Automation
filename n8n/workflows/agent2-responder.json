@@ -1,285 +1,106 @@
 {
-  "name": "Agent 2: The Responder",
+  "name": "Agent 2: Threat Responder",
   "nodes": [
     {
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "minutes"
-            }
-          ]
-        },
-        "duration": 5
+        "httpMethod": "POST",
+        "path": "",
+        "responseMode": "lastNode"
       },
-      "id": "schedule-trigger",
-      "name": "Schedule Trigger",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1,
-      "position": [250, 300]
+      "id": "webhook1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "agent2-responder-webhook"
     },
     {
       "parameters": {
-        "url": "http://localhost:8080/api/v1/tickets",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Token token={{$credentials.zammad_api_token}}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 10000
-        }
+        "jsCode": "const alert = $input.item.json;\nconst body = alert.body || alert;\nconst alertData = body.alert || body;\n\nconst rule = alertData.rule || {};\nconst agent = alertData.agent || {};\nconst data = alertData.data || {};\n\nconst severityLevel = parseInt(rule.level) || 0;\nlet priority = 1;\nif (severityLevel >= 12) priority = 3;\nelse if (severityLevel >= 7) priority = 2;\n\nreturn {\n  json: {\n    alertData: {\n      rule_id: rule.id,\n      rule_description: rule.description,\n      severity: severityLevel,\n      priority: priority,\n      source_ip: data.srcip || 'N/A',\n      dest_ip: data.dstip || 'N/A',\n      hostname: agent.name || 'N/A',\n      agent_id: agent.id || 'N/A',\n      full_log: alertData.full_log || '',\n      timestamp: alertData.timestamp || new Date().toISOString(),\n      mitre_tactics: (rule.mitre?.tactic || []).join(', '),\n      mitre_ids: (rule.mitre?.id || []).join(', '),\n      groups: (rule.groups || []).join(', ')\n    },\n    prompt: ''\n  }\n};"
       },
-      "id": "get-pending",
-      "name": "Get Pending Tickets",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "id": "parse1",
+      "name": "Parse Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [500, 300]
     },
     {
       "parameters": {
-        "batchSize": 1
+        "jsCode": "const d = $input.item.json;\n\nconst prompt = 'You are a Tier 3 SOC Analyst performing deep threat analysis.\\n\\nCONTEXT:\\n- Alert was triggered by Wazuh SIEM\\n- Initial triage completed by Agent 1\\n- Determine threat intent and propose remediation\\n\\nALERT DATA:\\n- Rule: ' + (d.alertData.rule_description || 'N/A') + '\\n- Rule ID: ' + (d.alertData.rule_id || 'N/A') + '\\n- Severity: ' + d.alertData.severity + '/15\\n- Source IP: ' + d.alertData.source_ip + '\\n- Destination IP: ' + d.alertData.dest_ip + '\\n- Affected Host: ' + d.alertData.hostname + '\\n- MITRE ATT&CK: ' + (d.alertData.mitre_tactics || 'N/A') + '\\n- MITRE IDs: ' + (d.alertData.mitre_ids || 'N/A') + '\\n- Groups: ' + (d.alertData.groups || 'N/A') + '\\n- Timestamp: ' + d.alertData.timestamp + '\\n- Full Log: ' + (d.alertData.full_log?.substring(0, 1000) || 'N/A') + '\\n\\nREQUIRED OUTPUT FORMAT (JSON ONLY):\\n{\\n  \"threat_intent\": \"string\",\\n  \"blast_radius\": {\\n    \"affected_systems\": [\"array\"],\\n    \"scope\": \"low|medium|high|critical\",\\n    \"data_at_risk\": [\"array\"]\\n  },\\n  \"mitre_attack\": {\\n    \"primary_technique\": \"T####\",\\n    \"techniques\": [\"array\"],\\n    \"tactics\": [\"array\"]\\n  },\\n  \"remediation_options\": [\\n    {\\n      \"action\": \"string\",\\n      \"description\": \"string\",\\n      \"impact\": \"string\",\\n      \"confidence\": 0.0-1.0\\n    }\\n  ],\\n  \"recommended_action\": \"string\",\\n  \"confidence_score\": 0.0-1.0,\\n  \"inconclusive\": boolean\\n}\\n\\nCRITICAL: If confidence_score < 0.7, explicitly state: \"Inconclusive: Requires manual forensic investigation.\"\\n\\nFormat: JSON only, no additional text.';\n\nreturn { json: { prompt } };"
       },
-      "id": "loop-tickets",
-      "name": "Loop Over Tickets",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 1,
+      "id": "deep1",
+      "name": "Deep Analysis Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [750, 300]
     },
     {
       "parameters": {
-        "url": "=https://localhost:55000/agents/{{$json.group_ids?.[0]}}",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{$credentials.wazuh_api_token}}"
-            }
+            {"name": "Content-Type", "value": "application/json"}
           ]
         },
-        "options": {
-          "timeout": 10000
-        }
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2048 } } }}"
       },
-      "id": "get-context",
-      "name": "Get Wazuh Context",
+      "id": "geminiReq",
+      "name": "Gemini Deep Analysis",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1000, 300],
-      "continueOnFail": true
+      "typeVersion": 4.2,
+      "position": [1000, 300]
     },
     {
       "parameters": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent",
-        "authentication": "queryAuth",
-        "queryAuth": {
-          "addTokenTo": "url",
-          "key": "key",
-          "value": "={{$credentials.gemini_api_key}}"
-        },
-        "sendBody": true,
-        "body": "={{JSON.stringify({\n  contents: [{\n    parts: [{\n      text: \"Perform deep threat analysis for this security alert.\\n\\nAlert Details:\\n- Rule ID: \" + $json.rule_id + \"\\n- Level: \" + $json.level + \"\\n- Description: \" + $json.title + \"\\n- MITRE: \" + $json.mitre_id + \" - \" + $json.mitre_tactic + \"\\n\\nProvide:1. Blast radius assessment\\n2. Business impact\\n3. Recommended remediation actions\\n4. Confidence score (0-100)\\n5. True positive likelihood\"\n    }]\n  }]\n})}}",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const data = $input.item.json;\nlet analysis = {\n  threat_intent: 'No AI response',\n  blast_radius: { affected_systems: [], scope: 'unknown', data_at_risk: [] },\n  mitre_attack: { primary_technique: 'N/A', techniques: [], tactics: [] },\n  remediation_options: [],\n  recommended_action: 'None',\n  confidence_score: 0,\n  inconclusive: true\n};\n\ntry {\n  if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {\n    const text = data.candidates[0].content.parts[0].text;\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) analysis = JSON.parse(match[0]);\n  }\n} catch (e) {\n  analysis.threat_intent = 'Error parsing AI response: ' + e.message;\n}\n\nreturn { json: analysis };"
       },
-      "id": "deep-analysis",
-      "name": "Deep AI Analysis",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "id": "parse1",
+      "name": "Parse Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1250, 300]
     },
     {
       "parameters": {
-        "functionCode": "// Format analysis and update data\nconst currentItem = $input.first().json;\nconst ticketData = currentItem.json;\nconst aiResponse = currentItem.candidates?.[0]?.content?.parts?.[0]?.text || '';\n\n// Extract confidence from AI response\nconst confidenceMatch = aiResponse.match(/(\\d{1,3})%?\\s*(?:confidence)/i);\nconst confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : 50;\n\nconst update = {\n  group: confidence >= 80 ? \"SOC-Triage\" : currentItem.group,\n  state: \"open\",\n  custom_fields: {\n    soc_confidence: confidence,\n    soc_proposal: aiResponse,\n    soc_action: confidence >= 80 ? \"pending\" : \"manual_review\",\n    soc_mitre_id: ticketData.custom_fields?.soc_mitre_id || '',\n    soc_mitre_tactic: ticketData.custom_fields?.soc_mitre_tactic || ''\n  },\n  article: {\n    body: `Deep Analysis Results:\\n\\n${aiResponse}\\n\\n---\\nConfidence Score: ${confidence}%\\nAction: ${confidence >= 80 ? \"Awaiting Approval\" : \"Manual Review\"}`,\n    type: \"note\",\n    sender: \"AI Analysis\"\n  }\n};\n\nreturn { ticket_id: currentItem.id, update: update, confidence: confidence };"
+        "jsCode": "const analysis = $input.item.json;\nconst alertData = $('Parse Alert').item.json.alertData;\n\nconst remediationHtml = analysis.remediation_options.map((r, i) => \n  '<li><strong>' + (i + 1) + '. ' + r.action + '</strong><br>Description: ' + r.description + '<br>Impact: ' + r.impact + '<br>Confidence: ' + ((r.confidence || 0) * 100).toFixed(0) + '%</li>'\n).join('');\n\nconst blastRadiusHtml = '<p><strong>Affected Systems:</strong> ' + (analysis.blast_radius.affected_systems.join(', ') || 'None identified') + '</p><p><strong>Scope:</strong> ' + analysis.blast_radius.scope + '</p><p><strong>Data at Risk:</strong> ' + (analysis.blast_radius.data_at_risk.join(', ') || 'None identified') + '</p>';\n\nconst mitreHtml = '<p><strong>Primary Technique:</strong> ' + analysis.mitre_attack.primary_technique + '</p><p><strong>Tactics:</strong> ' + (analysis.mitre_attack.tactics.join(', ') || 'N/A') + '</p><p><strong>Techniques:</strong> ' + (analysis.mitre_attack.techniques.join(', ') || 'N/A') + '</p>';\n\nconst body = '<h2>Deep Threat Analysis Report</h2><h3>Alert Details</h3><p><strong>Rule:</strong> ' + alertData.rule_description + '</p><p><strong>Severity:</strong> ' + alertData.severity + '/15</p><p><strong>Host:</strong> ' + alertData.hostname + '</p><p><strong>Source IP:</strong> ' + alertData.source_ip + '</p><p><strong>Destination IP:</strong> ' + alertData.dest_ip + '</p><h3>Threat Intent</h3><p>' + analysis.threat_intent + '</p><h3>Blast Radius Assessment</h3>' + blastRadiusHtml + '<h3>MITRE ATT&CK Mapping</h3>' + mitreHtml + '<h3>Remediation Options</h3><ol>' + (remediationHtml || '<li>No options generated</li>') + '</ol><h3>Recommended Action</h3><p><strong>' + analysis.recommended_action + '</strong></p><h3>Analysis Confidence</h3><p>Confidence Score: ' + ((analysis.confidence_score || 0) * 100).toFixed(0) + '%</p><p>Status: ' + (analysis.inconclusive ? 'INCONCLUSIVE - Requires manual forensic investigation' : 'Analysis Complete') + '</p><hr><p><small>Generated by SOC AI Automation - Agent 2: Threat Responder</small></p>';\n\nreturn { json: { body } };"
       },
-      "id": "format-analysis",
-      "name": "Format Analysis Results",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "id": "format1",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1500, 300]
     },
     {
       "parameters": {
-        "url": "=http://localhost:8080/api/v1/tickets/{{$json.ticket_id}}",
+        "url": "http://localhost:8080/api/v1/tickets.json",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Token token={{$credentials.zammad_api_token}}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Authorization", "value": "Token token=YOUR_ZAMMAD_TOKEN"}
           ]
         },
         "sendBody": true,
-        "body": "={{JSON.stringify($json.update)}}",
-        "options": {
-          "timeout": 10000
-        }
+        "specifyBody": "json",
+        "jsonBody": "={{ { ticket: { title: '[DEEP ANALYSIS] ' + $('Parse Alert').item.json.alertData.rule_description, group: 'Users', priority: $('Parse Alert').item.json.alertData.priority, state: 'open', article: { body: $('Format Report').item.json.body, content_type: 'text/html' } } } }}"
       },
-      "id": "update-ticket",
-      "name": "Update Zammad Ticket",
+      "id": "zammad1",
+      "name": "Create Zammad Ticket",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "typeVersion": 4.2,
       "position": [1750, 300]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "boolean": [
-            {
-              "value1": "={{$json.confidence >= 80}}",
-              "value2": true
-            }
-          ]
-        }
-      },
-      "id": "check-approval",
-      "name": "Check Approval Needed",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [2000, 300]
-    },
-    {
-      "parameters": {
-        "amount": 3600,
-        "unit": "seconds"
-      },
-      "id": "wait-approval",
-      "name": "Wait for Approval",
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1,
-      "position": [2250, 200]
-    },
-    {
-      "parameters": {
-        "functionCode": "// Check ticket status after wait period\nconst ticketId = $json.ticket_id;\n\n// In production, fetch latest ticket status from Zammad\n// For demo, we'll check if action was set to 'approved'\n\n// This would be replaced with actual Zammad API call\nconst isApproved = false; // Would query Zammad\n\nreturn { ticket_id: ticketId, approved: isApproved };"
-      },
-      "id": "check-status",
-      "name": "Check Approval Status",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [2500, 200]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "boolean": [
-            {
-              "value1": "={{$json.approved}}",
-              "value2": true
-            }
-          ]
-        }
-      },
-      "id": "approval-branch",
-      "name": "Approval Branch",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [2750, 200]
-    },
-    {
-      "parameters": {
-        "functionCode": "// Execute remediation (placeholder)\n// In production, this would trigger actual remediation\n\nconst ticketId = $json.ticket_id;\n\n// Example: Block IP via firewall\n// executeFirewallBlock(sourceIP);\n\n// Example: Disable user account\n// disableUserAccount(username);\n\nreturn {\n  ticket_id: ticketId,\n  executed: true,\n  action: \"Remediation executed successfully\"\n};"
-      },
-      "id": "execute-remediation",
-      "name": "Execute Remediation",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [3000, 100]
-    },
-    {
-      "parameters": {
-        "url": "=http://localhost:8080/api/v1/tickets/{{$json.ticket_id}}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Token token={{$credentials.zammad_api_token}}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "body": "={{JSON.stringify({\n  group: \"SOC-Approved\",\n  state: \"closed\",\n  custom_fields: {\n    soc_action: \"executed\",\n    soc_executed: true\n  },\n  article: {\n    body: \"Remediation executed automatically. Ticket closed.\",\n    type: \"note\",\n    sender: \"System\"\n  }\n})}}",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "id": "close-ticket",
-      "name": "Close Ticket (Executed)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [3250, 100]
     }
   ],
   "connections": {
-    "Schedule Trigger": {
-      "main": [[{"node": "Get Pending Tickets", "type": "main", "index": 0}]]
-    },
-    "Get Pending Tickets": {
-      "main": [[{"node": "Loop Over Tickets", "type": "main", "index": 0}]]
-    },
-    "Loop Over Tickets": {
-      "main": [[{"node": "Get Wazuh Context", "type": "main", "index": 0}]]
-    },
-    "Get Wazuh Context": {
-      "main": [[{"node": "Deep AI Analysis", "type": "main", "index": 0}]]
-    },
-    "Deep AI Analysis": {
-      "main": [[{"node": "Format Analysis Results", "type": "main", "index": 0}]]
-    },
-    "Format Analysis Results": {
-      "main": [[{"node": "Update Zammad Ticket", "type": "main", "index": 0}]]
-    },
-    "Update Zammad Ticket": {
-      "main": [[{"node": "Check Approval Needed", "type": "main", "index": 0}]]
-    },
-    "Check Approval Needed": {
-      "main": [
-        [{"node": "Wait for Approval", "type": "main", "index": 0}],
-        []
-      ]
-    },
-    "Wait for Approval": {
-      "main": [[{"node": "Check Approval Status", "type": "main", "index": 0}]]
-    },
-    "Check Approval Status": {
-      "main": [[{"node": "Approval Branch", "type": "main", "index": 0}]]
-    },
-    "Approval Branch": {
-      "main": [
-        [{"node": "Execute Remediation", "type": "main", "index": 0}],
-        []
-      ]
-    },
-    "Execute Remediation": {
-      "main": [[{"node": "Close Ticket (Executed)", "type": "main", "index": 0}]]
-    }
+    "Webhook": {"main": [[{"node": "Parse Alert", "type": "main", "index": 0}]]},
+    "Parse Alert": {"main": [[{"node": "Deep Analysis Prompt", "type": "main", "index": 0}]]},
+    "Deep Analysis Prompt": {"main": [[{"node": "Gemini Deep Analysis", "type": "main", "index": 0}]]},
+    "Gemini Deep Analysis": {"main": [[{"node": "Parse Analysis", "type": "main", "index": 0}]]},
+    "Parse Analysis": {"main": [[{"node": "Format Report", "type": "main", "index": 0}]]},
+    "Format Report": {"main": [[{"node": "Create Zammad Ticket", "type": "main", "index": 0}]]}
   },
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": ["SOC", "AI", "Responder"],
-  "triggerCount": 1,
-  "updatedAt": "2026-04-04T00:00:00.000Z",
-  "versionId": "1"
+  "settings": {}
 }

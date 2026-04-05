@@ -164,8 +164,9 @@ SOC-Ai-Driven-Automation/
 │   ├── README.md
 │   ├── docker-compose.yml
 │   ├── workflows/
-│   │   ├── agent1-dispatcher.json
-│   │   └── agent2-responder.json
+│   │   ├── wazuh-alert-poller.json   # Main alert receiver
+│   │   ├── agent1-dispatcher.json      # Alert dispatcher
+│   │   └── agent2-responder.json      # Deep analysis responder
 │   └── troubleshooting.md
 └── scripts/                    # Automation scripts
     ├── wazuh-alert-forwarder.py

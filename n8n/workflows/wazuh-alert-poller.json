@@ -1,0 +1,95 @@
+{
+  "name": "Wazuh Alert Poller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "",
+        "responseMode": "lastNode"
+      },
+      "id": "webhook1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "wazuh-alert-poller"
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $input.item.json;\nconst body = alert.body || alert;\nconst alertData = body.alert || body;\n\nconst rule = alertData.rule || {};\nconst agent = alertData.agent || {};\nconst data = alertData.data || {};\n\nconst severityLevel = parseInt(rule.level) || 0;\nlet priority = 1;\nif (severityLevel >= 12) priority = 3;\nelse if (severityLevel >= 7) priority = 2;\n\nreturn {\n  json: {\n    skip: false,\n    rule_id: rule.id,\n    rule_description: rule.description,\n    severity: severityLevel,\n    priority: priority,\n    source_ip: data.srcip || data.src_ip || 'N/A',\n    dest_ip: data.dstip || data.dst_ip || 'N/A',\n    hostname: agent.name || 'unknown',\n    agent_id: agent.id || 'N/A',\n    full_log: alertData.full_log || '',\n    timestamp: alertData.timestamp || alert.timestamp || new Date().toISOString(),\n    mitre_tactics: (rule.mitre?.tactic || []).join(', '),\n    mitre_ids: (rule.mitre?.id || []).join(', '),\n    groups: (rule.groups || []).join(', ')\n  }\n};"
+      },
+      "id": "parse1",
+      "name": "Parse Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.item.json;\nif (d.skip) return [];\n\nconst prompt = 'You are a Tier 2 SOC Analyst. Summarize this security alert in a concise, professional briefing for an on-call engineer.\\n\\nAlert Details:\\n- Rule: ' + (d.rule_description || 'N/A') + '\\n- Rule ID: ' + (d.rule_id || 'N/A') + '\\n- Severity: ' + d.severity + '/15\\n- Source IP: ' + d.source_ip + '\\n- Destination IP: ' + d.dest_ip + '\\n- Affected Host: ' + d.hostname + '\\n- Timestamp: ' + d.timestamp + '\\n- MITRE ATT&CK: ' + (d.mitre_tactics || 'N/A') + '\\n- Groups: ' + (d.groups || 'N/A') + '\\n- Full Log: ' + (d.full_log?.substring(0, 800) || 'N/A') + '\\n\\nProvide a JSON response with:\\n{\\n  \"summary\": \"Executive Summary (2-3 sentences)\",\\n  \"iocs\": [\"array of IPs, hashes, domains\"],\\n  \"immediate_actions\": [\"recommended actions if any\"],\\n  \"severity_assessment\": \"Assessment\"\\n}\\n\\nFormat: Professional, clinical tone. No speculation. JSON only.';\n\nreturn { json: { prompt } };"
+      },
+      "id": "geminiPrep",
+      "name": "Prepare Gemini",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 800 } } }}"
+      },
+      "id": "geminiReq",
+      "name": "Gemini AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nlet summary = { summary: 'No AI response', iocs: [], immediate_actions: [], severity_assessment: 'Unknown' };\n\ntry {\n  if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {\n    const text = data.candidates[0].content.parts[0].text;\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) summary = JSON.parse(match[0]);\n  }\n} catch (e) {\n  summary.summary = 'Error parsing AI response: ' + e.message;\n}\n\nreturn { json: summary };"
+      },
+      "id": "parseResp",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8080/api/v1/tickets.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Authorization", "value": "Token token=YOUR_ZAMMAD_TOKEN"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { ticket: { title: '[WAZUH] ' + $('Parse Alert').item.json.rule_description, group: 'Users', priority: $('Parse Alert').item.json.priority, state: 'new', article: { body: '<h3>SOC Alert Briefing</h3><p>' + $('Parse Response').item.json.summary + '</p><hr><p><strong>Severity:</strong> ' + $('Parse Alert').item.json.severity + '/15</p><p><strong>Host:</strong> ' + $('Parse Alert').item.json.hostname + '</p><p><strong>Source IP:</strong> ' + $('Parse Alert').item.json.source_ip + '</p><p><strong>Rule ID:</strong> ' + $('Parse Alert').item.json.rule_id + '</p><hr><p><strong>IOCs:</strong> ' + ($('Parse Response').item.json.iocs || []).join(', ') + '</p><p><strong>Immediate Actions:</strong> ' + ($('Parse Response').item.json.immediate_actions || []).join(', ') + '</p><p><strong>Assessment:</strong> ' + ($('Parse Response').item.json.severity_assessment || 'N/A') + '</p>', content_type: 'text/html' } } } }}"
+      },
+      "id": "zammad1",
+      "name": "Create Zammad Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {"main": [[{"node": "Parse Alert", "type": "main", "index": 0}]]},
+    "Parse Alert": {"main": [[{"node": "Prepare Gemini", "type": "main", "index": 0}]]},
+    "Prepare Gemini": {"main": [[{"node": "Gemini AI", "type": "main", "index": 0}]]},
+    "Gemini AI": {"main": [[{"node": "Parse Response", "type": "main", "index": 0}]]},
+    "Parse Response": {"main": [[{"node": "Create Zammad Ticket", "type": "main", "index": 0}]]}
+  },
+  "settings": {}
+}
