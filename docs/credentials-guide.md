@@ -45,17 +45,35 @@ echo $TOKEN
 | Admin User | `admin` | Set via environment variable |
 | Admin Password | `SOC_Automation_2026!` | Set via environment variable |
 
-### Gemini AI
+### Groq AI
 
 | Credential | Where to Find |
 |------------|---------------|
-| API Key | [Google AI Studio](https://makersuite.google.com/app/apikey) |
+| API Key | [Groq Cloud Console](https://console.groq.com/keys) |
 
 **Get API Key:**
-1. Go to Google AI Studio
-2. Click **Get API Key**
-3. Create new or select existing key
+1. Go to Groq Cloud Console
+2. Click **API Keys**
+3. Create new API key
 4. Copy the key
+
+---
+
+## Agent Identities (Zammad)
+
+The system uses specific identities for auditing. These users must be created in Zammad with the following details:
+
+| Identity | Email | Password | Role |
+|----------|-------|----------|------|
+| **Agent 1** | `agent1@soc.lab` | `SOC_Admin_2026!` | Agent |
+| **Agent 2** | `agent2@soc.lab` | `SOC_Admin_2026!` | Agent |
+
+### Basic Auth Encoding
+
+For n8n HTTP Request nodes using Basic Auth, encode the credentials as `base64(email:password)`:
+
+- **Agent 1**: `YWdlbnQxQHNvYy5sYWI6U09DX0FkbWluXzIwMjYh`
+- **Agent 2**: `YWdlbnQyQHNvYy5sYWI6U09DX0FkbWluXzIwMjYh`
 
 ### Gmail (for notifications)
 
@@ -90,11 +108,11 @@ Store credentials in **Settings → Credentials**:
    - Header Name: `Authorization`
    - Header Value: `Token token={{TOKEN}}`
 
-3. **gemini-api**
+3. **groq-api**
    - Type: HTTP Request
-   - Auth: Query Parameter
-   - Query Param Name: `key`
-   - Query Param Value: `{{API_KEY}}`
+   - Auth: Header
+   - Header Name: `Authorization`
+   - Header Value: `Bearer {{API_KEY}}`
 
 4. **gmail-smtp**
    - Type: Email (SMTP)
@@ -123,19 +141,24 @@ Store credentials in **Settings → Credentials**:
 
 ---
 
-## Environment Variables
+## Environment Variables (.env.example)
 
-Create a `.env` file for Docker Compose:
+Create a `.env` file for Docker Compose based on this template:
 
 ```bash
 # Wazuh
-WAZUH_API_TOKEN=your_wazuh_token
+WAZUH_API_USER=admin
+WAZUH_API_PASSWORD=your_secure_password
 
 # Zammad
 ZAMMAD_API_TOKEN=your_zammad_token
+AGENT1_EMAIL=agent1@soc.lab
+AGENT1_PASS=SOC_Admin_2026!
+AGENT2_EMAIL=agent2@soc.lab
+AGENT2_PASS=SOC_Admin_2026!
 
-# Gemini
-GEMINI_API_KEY=your_gemini_key
+# Groq AI
+GROQ_API_KEY=your_groq_key
 
 # Email
 GMAIL_USER=your-email@gmail.com

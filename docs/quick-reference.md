@@ -15,7 +15,9 @@
 |---------|----------|----------|
 | n8n | admin | *(set during install)* |
 | Wazuh | admin | *(check credentials.md)* |
-| Zammad | admin@zammad.local | *(set during install)* |
+| Zammad Agent 1 | agent1@soc.lab | `SOC_Admin_2026!` |
+| Zammad Agent 2 | agent2@soc.lab | `SOC_Admin_2026!` |
+| Zammad Admin | analyst@soc.local | *(set during install)* |
 
 ## Common Commands
 
@@ -80,7 +82,9 @@ systemctl restart wazuh-manager
 ## API Endpoints
 
 ### n8n Webhooks
-- Alert webhook: `POST http://localhost:5678/webhook/wazuh-alert`
+- **Wazuh Alert Poller**: `POST http://localhost:5678/webhook/wazuh-alert`
+- **Agent 1 Dispatcher**: `POST http://localhost:5678/webhook/agent1-dispatcher`
+- **Agent 2 Responder**: `POST http://localhost:5678/webhook/agent2-responder`
 
 ### Zammad API
 - Base: `http://localhost:8080/api/v1`
@@ -128,9 +132,11 @@ docker-compose up -d
 # View all logs
 docker-compose logs -f
 
-# Access n8n CLI
-docker exec -it soc-n8n sh
+### Verification Tools
 
-# Access Zammad CLI
-docker exec -it soc-zammad-railsserver rails c
+| Purpose | Command |
+|---------|---------|
+| Start SOC Test Suite | `python3 n8n/workflows/soc_test_suite.py` |
+| View History Log | `cat n8n/workflows/antigravity_history.md` |
+| Force Agent 2 Analysis | `curl -X POST -H "Content-Type: application/json" -d '{"ticket_id": <ID>}' http://localhost:5678/webhook/agent2-responder` |
 ```

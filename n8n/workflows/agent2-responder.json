@@ -12,11 +12,11 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [250, 300],
-      "webhookId": "agent2-responder-webhook"
+      "webhookId": "agent2-responder"
     },
     {
       "parameters": {
-        "jsCode": "const alert = $input.item.json;\nconst body = alert.body || alert;\nconst alertData = body.alert || body;\n\nconst rule = alertData.rule || {};\nconst agent = alertData.agent || {};\nconst data = alertData.data || {};\n\nconst severityLevel = parseInt(rule.level) || 0;\nlet priority = 1;\nif (severityLevel >= 12) priority = 3;\nelse if (severityLevel >= 7) priority = 2;\n\nreturn {\n  json: {\n    alertData: {\n      rule_id: rule.id,\n      rule_description: rule.description,\n      severity: severityLevel,\n      priority: priority,\n      source_ip: data.srcip || 'N/A',\n      dest_ip: data.dstip || 'N/A',\n      hostname: agent.name || 'N/A',\n      agent_id: agent.id || 'N/A',\n      full_log: alertData.full_log || '',\n      timestamp: alertData.timestamp || new Date().toISOString(),\n      mitre_tactics: (rule.mitre?.tactic || []).join(', '),\n      mitre_ids: (rule.mitre?.id || []).join(', '),\n      groups: (rule.groups || []).join(', ')\n    },\n    prompt: ''\n  }\n};"
+        "jsCode": "const alert = $input.item.json;\nconst body = alert.body || alert;\nconst alertData = body.alertData || body.alert || body;\nconst ticketId = body.ticket_id || alert.ticket_id;\n\nconst severityLevel = parseInt(alertData.severity) || 0;\nlet priority = alertData.priority || 1;\n\nreturn {\n  json: {\n    ticket_id: ticketId,\n    alertData: {\n      ...alertData,\n      severity: severityLevel,\n      priority: priority\n    }\n  }\n};"
       },
       "id": "parse1",
       "name": "Parse Alert",
@@ -26,9 +26,9 @@
     },
     {
       "parameters": {
-        "jsCode": "const d = $input.item.json;\n\nconst prompt = 'You are a Tier 3 SOC Analyst performing deep threat analysis.\\n\\nCONTEXT:\\n- Alert was triggered by Wazuh SIEM\\n- Initial triage completed by Agent 1\\n- Determine threat intent and propose remediation\\n\\nALERT DATA:\\n- Rule: ' + (d.alertData.rule_description || 'N/A') + '\\n- Rule ID: ' + (d.alertData.rule_id || 'N/A') + '\\n- Severity: ' + d.alertData.severity + '/15\\n- Source IP: ' + d.alertData.source_ip + '\\n- Destination IP: ' + d.alertData.dest_ip + '\\n- Affected Host: ' + d.alertData.hostname + '\\n- MITRE ATT&CK: ' + (d.alertData.mitre_tactics || 'N/A') + '\\n- MITRE IDs: ' + (d.alertData.mitre_ids || 'N/A') + '\\n- Groups: ' + (d.alertData.groups || 'N/A') + '\\n- Timestamp: ' + d.alertData.timestamp + '\\n- Full Log: ' + (d.alertData.full_log?.substring(0, 1000) || 'N/A') + '\\n\\nREQUIRED OUTPUT FORMAT (JSON ONLY):\\n{\\n  \"threat_intent\": \"string\",\\n  \"blast_radius\": {\\n    \"affected_systems\": [\"array\"],\\n    \"scope\": \"low|medium|high|critical\",\\n    \"data_at_risk\": [\"array\"]\\n  },\\n  \"mitre_attack\": {\\n    \"primary_technique\": \"T####\",\\n    \"techniques\": [\"array\"],\\n    \"tactics\": [\"array\"]\\n  },\\n  \"remediation_options\": [\\n    {\\n      \"action\": \"string\",\\n      \"description\": \"string\",\\n      \"impact\": \"string\",\\n      \"confidence\": 0.0-1.0\\n    }\\n  ],\\n  \"recommended_action\": \"string\",\\n  \"confidence_score\": 0.0-1.0,\\n  \"inconclusive\": boolean\\n}\\n\\nCRITICAL: If confidence_score < 0.7, explicitly state: \"Inconclusive: Requires manual forensic investigation.\"\\n\\nFormat: JSON only, no additional text.';\n\nreturn { json: { prompt } };"
+        "jsCode": "const d = $input.item.json;\n\nconst prompt = `You are a Tier 3 SOC Analyst performing deep threat analysis.\\n\\nCONTEXT:\\n- Alert was triggered by Wazuh SIEM\\n- Initial triage completed by Agent 1\\n- Affected Host: ${d.alertData.hostname} (ID: ${d.alertData.agent_id || 'N/A'})\\n- Determine threat intent, analyze associated vulnerabilities (CVEs), and propose remediation\\n\\nALERT DATA:\\n- Rule: ${d.alertData.rule_description || 'N/A'}\\n- Rule ID: ${d.alertData.rule_id || 'N/A'}\\n- Severity: ${d.alertData.severity}/15\\n- Host: ${d.alertData.hostname}\\n- Source IP: ${d.alertData.source_ip}\\n- Full Log: ${d.alertData.full_log?.substring(0, 1000) || 'N/A'}\\n\\nTASK:\\n1. Analyze the threat intent for the specific host ${d.alertData.hostname}.\\n2. Identify related CVEs and provide detailed mitigations.\\n3. Assess if this can be auto-resolved or requires human intervention.\\n\\nREQUIRED OUTPUT FORMAT (JSON ONLY):\\n{\\n  \"threat_intent\": \"string\",\\n  \"cve_list\": [\"CVE-YYYY-XXXX\"],\\n  \"cve_analysis\": \"Explanation of CVEs and specific host-based mitigations for ${d.alertData.hostname}\",\\n  \"blast_radius\": { \"scope\": \"low|medium|high|critical\", \"affected_systems\": [] },\\n  \"remediation_options\": [ { \"action\": \"string\", \"description\": \"string\", \"confidence\": 0.0-1.0 } ],\\n  \"recommended_action\": \"string\",\\n  \"confidence_score\": 0.0-1.0,\\n  \"inconclusive\": boolean\\n}\\n\\nCONSERVATISM CLAUSE: \\n- Set \\\"inconclusive\\\": true for ANY administrative access or privilege anomalies (Logins, sudo, user creation).\\n- Set \\\"inconclusive\\\": true if intent is not 100% verifiable from logs alone.\\n- High confidence scores (>=0.9) are reserved for clear, non-administrative compromises with well-known remediations.\\n\\nCRITICAL: If confidence_score >= 0.9 and inconclusive is false, we will auto-close the ticket.\\nFormat: JSON only.`;\n\nreturn { json: { prompt } };"
       },
-      "id": "deep1",
+      "id": "deepPrompt",
       "name": "Deep Analysis Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -36,17 +36,18 @@
     },
     {
       "parameters": {
+        "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {"name": "Content-Type", "value": "application/json"},
-            {"name": "Authorization", "value": "Bearer INSERT_YOUR_GROQ_API_KEY"}
+            {"name": "Authorization", "value": "Bearer YOUR_GROQ_API_KEY"}
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { model: \"llama-3.3-70b-versatile\", messages: [{ role: \"user\", content: $json.prompt }], temperature: 0.3, max_tokens: 2048 } }}"
+        "jsonBody": "={{ { model: \"llama-3.3-70b-versatile\", messages: [{ role: \"user\", content: $json.prompt }], temperature: 0.2, max_tokens: 1024 } }}"
       },
       "id": "groqReq",
       "name": "Groq Deep Analysis",
@@ -56,9 +57,9 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.item.json;\nlet analysis = {\n  threat_intent: 'No AI response',\n  blast_radius: { affected_systems: [], scope: 'unknown', data_at_risk: [] },\n  mitre_attack: { primary_technique: 'N/A', techniques: [], tactics: [] },\n  remediation_options: [],\n  recommended_action: 'None',\n  confidence_score: 0,\n  inconclusive: true\n};\n\ntry {\n  if (data.choices && data.choices[0]?.message?.content) {\n    const text = data.choices[0].message.content;\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) analysis = JSON.parse(match[0]);\n  }\n} catch (e) {\n  analysis.threat_intent = 'Error parsing AI response: ' + e.message;\n}\n\nreturn { json: analysis };"
+        "jsCode": "const data = $input.item.json;\nlet analysis = { \n  threat_intent: 'No AI response', \n  cve_list: [], \n  cve_analysis: 'N/A', \n  remediation_options: [], \n  recommended_action: 'None', \n  confidence_score: 0, \n  inconclusive: true \n};\n\ntry {\n  if (data.choices && data.choices[0]?.message?.content) {\n    const text = data.choices[0].message.content;\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) analysis = JSON.parse(match[0]);\n  }\n} catch (e) {\n  analysis.threat_intent = 'Error parsing response: ' + e.message;\n}\n\nreturn { json: analysis };"
       },
-      "id": "parse1",
+      "id": "parseAnalysis",
       "name": "Parse Analysis",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -66,9 +67,9 @@
     },
     {
       "parameters": {
-        "jsCode": "const analysis = $input.item.json;\nconst alertData = $('Parse Alert').item.json.alertData;\n\nconst remediationHtml = analysis.remediation_options.map((r, i) => \n  '<li><strong>' + (i + 1) + '. ' + r.action + '</strong><br>Description: ' + r.description + '<br>Impact: ' + r.impact + '<br>Confidence: ' + ((r.confidence || 0) * 100).toFixed(0) + '%</li>'\n).join('');\n\nconst blastRadiusHtml = '<p><strong>Affected Systems:</strong> ' + (analysis.blast_radius.affected_systems.join(', ') || 'None identified') + '</p><p><strong>Scope:</strong> ' + analysis.blast_radius.scope + '</p><p><strong>Data at Risk:</strong> ' + (analysis.blast_radius.data_at_risk.join(', ') || 'None identified') + '</p>';\n\nconst mitreHtml = '<p><strong>Primary Technique:</strong> ' + analysis.mitre_attack.primary_technique + '</p><p><strong>Tactics:</strong> ' + (analysis.mitre_attack.tactics.join(', ') || 'N/A') + '</p><p><strong>Techniques:</strong> ' + (analysis.mitre_attack.techniques.join(', ') || 'N/A') + '</p>';\n\nconst body = '<h2>Deep Threat Analysis Report</h2><h3>Alert Details</h3><p><strong>Rule:</strong> ' + alertData.rule_description + '</p><p><strong>Severity:</strong> ' + alertData.severity + '/15</p><p><strong>Host:</strong> ' + alertData.hostname + '</p><p><strong>Source IP:</strong> ' + alertData.source_ip + '</p><p><strong>Destination IP:</strong> ' + alertData.dest_ip + '</p><h3>Threat Intent</h3><p>' + analysis.threat_intent + '</p><h3>Blast Radius Assessment</h3>' + blastRadiusHtml + '<h3>MITRE ATT&CK Mapping</h3>' + mitreHtml + '<h3>Remediation Options</h3><ol>' + (remediationHtml || '<li>No options generated</li>') + '</ol><h3>Recommended Action</h3><p><strong>' + analysis.recommended_action + '</strong></p><h3>Analysis Confidence</h3><p>Confidence Score: ' + ((analysis.confidence_score || 0) * 100).toFixed(0) + '%</p><p>Status: ' + (analysis.inconclusive ? 'INCONCLUSIVE - Requires manual forensic investigation' : 'Analysis Complete') + '</p><hr><p><em>Generated by Agent 2: Threat Responder | ' + new Date().toISOString() + '</em></p>';\n\nreturn { json: { body, alertData } };"
+        "jsCode": "const ana = $input.item.json;\nconst alertData = $('Parse Alert').item.json.alertData;\n\nlet html = `<h2>Deep Threat Analysis Report</h2>\\n<h3>Intent: ${ana.threat_intent}</h3>\\n<hr>\\n<h3>Vulnerability Intelligence</h3>\\n<p><strong>CVEs:</strong> ${ana.cve_list.join(', ') || 'None identified'}</p>\\n<p>${ana.cve_analysis}</p>\\n<hr>\\n<h3>Suggested Remediation</h3>\\n<ul>`;\n\nana.remediation_options.forEach(r => {\n  html += `<li><strong>${r.action}:</strong> ${r.description} (Confidence: ${(r.confidence * 100).toFixed(0)}%)</li>`;\n});\n\nhtml += `</ul>\\n<p><strong>Recommended Next Step:</strong> ${ana.recommended_action}</p>\\n<hr>\\n<p><strong>AI Confidence:</strong> ${(ana.confidence_score * 100).toFixed(0)}%</p>`;\n\nreturn { json: { body: html, inconclusive: ana.inconclusive, confidence: ana.confidence_score, cve_list: ana.cve_list } };"
       },
-      "id": "format1",
+      "id": "formatReport",
       "name": "Format Report",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -76,23 +77,88 @@
     },
     {
       "parameters": {
-        "url": "http://localhost:8080/api/v1/tickets.json",
+        "method": "POST",
+        "url": "={{ \"http://172.19.0.1:8080/api/v1/ticket_articles\" }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {"name": "Content-Type", "value": "application/json"},
-            {"name": "Authorization", "value": "Token token=INSERT_YOUR_ZAMMAD_API_TOKEN"}
+            {"name": "Authorization", "value": "Basic YWdlbnQyQHNvYy5sYWI6U09DX0FkbWluXzIwMjYh"}
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { ticket: { title: '[DEEP ANALYSIS] ' + $('Parse Alert').item.json.alertData.rule_description, group: 'Users', priority: $('Parse Alert').item.json.alertData.priority, state: 'open', article: { body: $('Format Report').item.json.body, content_type: 'text/html' } } } }}"
+        "jsonBody": "={{ { ticket_id: $('Parse Alert').item.json.ticket_id, body: $json.body, content_type: 'text/html', type: 'note', internal: false } }}"
       },
-      "id": "zammad1",
-      "name": "Create Zammad Ticket",
+      "id": "postArticle",
+      "name": "Post Remediation Note",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1750, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $node[\"Format Report\"].json.confidence >= 0.9 }}",
+              "value2": true
+            },
+            {
+              "value1": "={{ $node[\"Format Report\"].json.inconclusive }}",
+              "value2": false
+            }
+          ]
+        },
+        "combineOperation": "all"
+      },
+      "id": "ifNode1",
+      "name": "Decision If",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ \"http://172.19.0.1:8080/api/v1/tickets/\" + $('Parse Alert').item.json.ticket_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Authorization", "value": "Basic YWdlbnQyQHNvYy5sYWI6U09DX0FkbWluXzIwMjYh"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { state_id: 4, soc_cve_list: ($node[\"Format Report\"].json.cve_list || []).join(', ') } }}"
+      },
+      "id": "closeTicket",
+      "name": "Auto-Close Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2250, 200]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ \"http://172.19.0.1:8080/api/v1/tickets/\" + $('Parse Alert').item.json.ticket_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "Authorization", "value": "Basic YWdlbnQyQHNvYy5sYWI6U09DX0FkbWluXzIwMjYh"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { group_id: 2, owner_id: 3, state_id: 2, soc_cve_list: ($node[\"Format Report\"].json.cve_list || []).join(', ') } }}"
+      },
+      "id": "escalateTicket",
+      "name": "Escalate to Human",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2250, 400]
     }
   ],
   "connections": {
@@ -101,7 +167,14 @@
     "Deep Analysis Prompt": {"main": [[{"node": "Groq Deep Analysis", "type": "main", "index": 0}]]},
     "Groq Deep Analysis": {"main": [[{"node": "Parse Analysis", "type": "main", "index": 0}]]},
     "Parse Analysis": {"main": [[{"node": "Format Report", "type": "main", "index": 0}]]},
-    "Format Report": {"main": [[{"node": "Create Zammad Ticket", "type": "main", "index": 0}]]}
+    "Format Report": {"main": [[{"node": "Post Remediation Note", "type": "main", "index": 0}]]},
+    "Post Remediation Note": {"main": [[{"node": "Decision If", "type": "main", "index": 0}]]},
+    "Decision If": {
+      "main": [
+        [{"node": "Auto-Close Ticket", "type": "main", "index": 0}],
+        [{"node": "Escalate to Human", "type": "main", "index": 0}]
+      ]
+    }
   },
   "settings": {}
 }

@@ -116,20 +116,20 @@ curl -H "Authorization: Token token=YOUR_TOKEN" \
 docker-compose restart zammad-railsserver
 ```
 
+**Zammad API Returning 422 (Unprocessable Entity):**
+- **Cause**: Often due to missing mandatory fields or invalid user/group IDs in the request body.
+- **Solution**: Ensure your n8n workflow sends a flat JSON structure (no `ticket` wrapper). Verify that the `group_id`, `customer_id`, and `priority_id` match the IDs physically present in your Zammad instance.
+- **Reference**: Agent 1 and Agent 2 must be added to the appropriate Zammad groups with `full` access.
+
 ---
 
 ## Network Issues
 
-### Container Network
-
-```bash
-# Check network
-docker network ls
-docker network inspect soc-net
-
-# Test connectivity between containers
-docker exec soc-n8n curl -s http://zammad-nginx:8080
-```
+### Docker Bridge Gateway (Cross-Stack Communication)
+- **Problem**: n8n (on one docker-compose stack) cannot reach Zammad (on another) via `localhost`.
+- **Solution**: Use the Docker bridge gateway IP (usually `http://172.19.0.1:8080`).
+- **Check IP**: `ip addr show docker0 | grep inet`
+- **Verify**: `docker exec soc-n8n curl -I http://172.19.0.1:8080`
 
 ### Port Conflicts
 
@@ -176,6 +176,17 @@ tail -50 /opt/soc-automation/logs/forwarder.log
 - Verify API key is valid
 - Check API quota
 - Check network connectivity
+
+### AI Agent Behavior Issues
+
+**AI is overconfident / Auto-closing risky tickets:**
+- **Symptom**: Agent 2 auto-resolves a ticket for an administrative anomaly (e.g., sudo login).
+- **Solution**: Check the **Conservatism Clause** in the `Agent 2: Responder` workflow prompt. Ensure the AI is instructed to set `inconclusive: true` for any administrative activity.
+- **Tuning**: Increase the decision threshold in the `Decision If` node (recommended: **0.9**).
+
+**AI summary is missing CVEs:**
+- **Cause**: AI model may not recall the specific CVE from the alert description alone.
+- **Solution**: Ensure Agent 1's prompt explicitly asks for "CVE identification". Verify the Groq model is set to `llama-3.3-70b-versatile` for maximum reasoning capability.
 
 ---
 

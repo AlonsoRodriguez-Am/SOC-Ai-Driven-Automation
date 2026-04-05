@@ -56,14 +56,15 @@ The SOC-Ai-Driven-Automation system is designed to provide autonomous security o
 |---------|------|----------|
 | Zammad UI | 8080 | HTTP |
 
-### 4. Gemini AI
+### 4. Groq AI (Llama 3.3 70B)
 
-**Purpose:** Threat analysis and recommendations
+**Purpose:** Threat analysis, CVE enrichment, and autonomous decision support
 
 **Function:**
-- Alert summarization
-- Deep threat analysis
-- Remediation proposals
+- Alert summarization with CVE identification
+- Deep threat analysis with host-specific context
+- Remediation proposals with confidence scoring
+- Conservatism Clause enforcement for administrative anomalies
 
 ---
 
@@ -109,7 +110,7 @@ The SOC-Ai-Driven-Automation system is designed to provide autonomous security o
 │  │         └────────────────┼────────────────┘                   │   │
 │  │                          │                                    │   │
 │  │                    ┌─────┴─────┐                             │   │
-│  │                    │  Gemini   │                             │   │
+│  │                    │  Groq   │                             │   │
 │  │                    │    AI     │                             │   │
 │  │                    └─────┬─────┘                             │   │
 │  └──────────────────────────┼───────────────────────────────────┘   │
@@ -256,11 +257,26 @@ Index: zammad
 - Auth: Token header
 - Operations: Create, Read, Update tickets
 
-### n8n → Gemini AI
+### n8n → Groq AI
 
 **Method:** REST API
-- Endpoint: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent`
-- Auth: API key in query parameter
+- Endpoint: `https://api.groq.com/openai/v1/chat/completions`
+- Model: `llama-3.3-70b-versatile`
+- Auth: Bearer token in Authorization header
+
+### Identity & Audit Model
+
+| Identity | Zammad User | ID | Role |
+|----------|-------------|-----|------|
+| Agent 1 (Dispatcher) | `agent1@soc.lab` | 78 | Creates tickets |
+| Agent 2 (Responder) | `agent2@soc.lab` | 77 | Deep analysis, auto-resolve/escalate |
+| Senior Analyst | `admin@soc.local` | 3 | Human escalation owner |
+
+### Autonomous Decision Engine
+
+- **Threshold**: Confidence >= 90% AND `inconclusive: false` → Auto-Close
+- **Conservatism Clause**: Administrative anomalies always escalated
+- **Auth Failure Elevation**: Level 5 auth failures promoted to Priority 2
 
 ---
 

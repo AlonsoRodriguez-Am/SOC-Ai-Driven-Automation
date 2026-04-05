@@ -12,11 +12,11 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [250, 300],
-      "webhookId": "agent1-dispatcher-webhook"
+      "webhookId": "agent1-dispatcher"
     },
     {
       "parameters": {
-        "jsCode": "const alert = $input.item.json;\nconst body = alert.body || alert;\nconst alertData = body.alert || body;\n\nconst rule = alertData.rule || {};\nconst agent = alertData.agent || {};\nconst data = alertData.data || {};\n\nconst severityLevel = parseInt(rule.level) || 0;\nlet priority = 1;\nif (severityLevel >= 12) priority = 3;\nelse if (severityLevel >= 7) priority = 2;\n\nconst prompt = 'You are a Tier 2 SOC Analyst. Summarize this security alert in a concise, professional briefing for an on-call engineer.\\n\\nAlert Details:\\n- Rule: ' + (rule.description || 'N/A') + '\\n- Rule ID: ' + (rule.id || 'N/A') + '\\n- Severity: ' + severityLevel + '/15\\n- Source IP: ' + (data.srcip || 'N/A') + '\\n- Destination IP: ' + (data.dstip || 'N/A') + '\\n- Affected Host: ' + (agent.name || 'N/A') + '\\n- Timestamp: ' + (alertData.timestamp || 'N/A') + '\\n- MITRE: ' + ((rule.mitre?.tactic || []).join(', ') || 'N/A') + '\\n- Full Log: ' + (alertData.full_log || 'N/A') + '\\n\\nProvide JSON:\\n{\\n  \"summary\": \"2-3 sentences\",\\n  \"iocs\": [\"array\"],\\n  \"immediate_actions\": [\"actions\"],\\n  \"severity_assessment\": \"text\"}\\n\\nFormat: Professional, clinical tone. No speculation. JSON only.';\n\nreturn {\n  json: {\n    alertData: {\n      rule_id: rule.id,\n      rule_description: rule.description,\n      severity: severityLevel,\n      priority: priority,\n      source_ip: data.srcip || 'N/A',\n      dest_ip: data.dstip || 'N/A',\n      hostname: agent.name || 'N/A',\n      agent_id: agent.id || 'N/A',\n      full_log: alertData.full_log || '',\n      timestamp: alertData.timestamp || new Date().toISOString(),\n      mitre_tactics: (rule.mitre?.tactic || []).join(', '),\n      mitre_ids: (rule.mitre?.id || []).join(', '),\n      groups: (rule.groups || []).join(', ')\n    },\n    prompt: prompt\n  }\n};"
+        "jsCode": "const alert = $input.item.json;\nconst body = alert.body || alert;\nconst alertData = body.alert || body;\n\nconst rule = alertData.rule || {};\nconst agent = alertData.agent || {};\nconst data = alertData.data || {};\n\nconst severityLevel = parseInt(rule.level) || 0;\nlet priority = 1;\nif (severityLevel >= 12) priority = 3;\nelse if (severityLevel >= 7) priority = 2;\n\n// Elevate authentication failures to P2 for SOC visibility\nif (rule.description?.toLowerCase().includes('authentication failure')) {\n  priority = 2;\n}\n\nconst prompt = `You are a Tier 2 SOC Analyst. Summarize this security alert in a concise, professional briefing for an on-call engineer.\\n\\nAlert Details:\\n- Rule: ${rule.description || 'N/A'}\\n- Rule ID: ${rule.id || 'N/A'}\\n- Severity: ${severityLevel}/15\\n- Source IP: ${data.srcip || 'N/A'}\\n- Destination IP: ${data.dstip || 'N/A'}\\n- Affected Host: ${agent.name || 'N/A'}\\n- Timestamp: ${alertData.timestamp || 'N/A'}\\n- MITRE: ${(rule.mitre?.tactic || []).join(', ') || 'N/A'}\\n- Full Log: ${alertData.full_log || 'N/A'}\\n\\nTASK:\\n1. Provide a professional summary.\\n2. Identify any CVEs associated with this type of activity or rule.\\n3. Provide an explanation of those CVEs and suggested mitigations.\\n\\nProvide JSON:\\n{\\n  \"summary\": \"2-3 sentences\",\\n  \"cve_list\": [\"CVE-YYYY-XXXXX\"],\\n  \"cve_details\": \"Explanation and mitigations\",\\n  \"iocs\": [\"array\"],\\n  \"immediate_actions\": [\"actions\"],\\n  \"severity_assessment\": \"text\"\\n}\\n\\nFormat: Professional, clinical tone. No speculation. JSON only.`;\n\nreturn {\n  json: {\n    alertData: {\n      rule_id: rule.id,\n      rule_description: rule.description,\n      severity: severityLevel,\n      priority: priority,\n      source_ip: data.srcip || 'N/A',\n      dest_ip: data.dstip || 'N/A',\n      hostname: agent.name || 'N/A',\n      agent_id: agent.id || 'N/A',\n      full_log: alertData.full_log || '',\n      timestamp: alertData.timestamp || new Date().toISOString(),\n      mitre_tactics: (rule.mitre?.tactic || []).join(', '),\n      mitre_ids: (rule.mitre?.id || []).join(', '),\n      groups: (rule.groups || []).join(', ')\n    },\n    prompt: prompt\n  }\n};"
       },
       "id": "parse1",
       "name": "Parse Alert",
@@ -26,12 +26,13 @@
     },
     {
       "parameters": {
+        "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {"name": "Content-Type", "value": "application/json"},
-            {"name": "Authorization", "value": "Bearer INSERT_YOUR_GROQ_API_KEY"}
+            {"name": "Authorization", "value": "Bearer YOUR_GROQ_API_KEY"}
           ]
         },
         "sendBody": true,
@@ -46,7 +47,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.item.json;\nlet summary = { summary: 'No AI response', iocs: [], immediate_actions: [], severity_assessment: 'Unknown' };\n\ntry {\n  if (data.choices && data.choices[0]?.message?.content) {\n    const text = data.choices[0].message.content;\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) summary = JSON.parse(match[0]);\n  }\n} catch (e) {\n  summary.summary = 'Error parsing AI response: ' + e.message;\n}\n\nreturn { json: summary };"
+        "jsCode": "const data = $input.item.json;\nlet summary = { \n  summary: 'No AI response', \n  cve_list: [], \n  cve_details: 'N/A', \n  iocs: [], \n  immediate_actions: [], \n  severity_assessment: 'Unknown' \n};\n\ntry {\n  if (data.choices && data.choices[0]?.message?.content) {\n    const text = data.choices[0].message.content;\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) summary = JSON.parse(match[0]);\n  }\n} catch (e) {\n  summary.summary = 'Error parsing AI response: ' + e.message;\n}\n\nreturn { json: summary };"
       },
       "id": "parseResp",
       "name": "Parse Response",
@@ -56,17 +57,18 @@
     },
     {
       "parameters": {
-        "url": "http://localhost:8080/api/v1/tickets.json",
+        "method": "POST",
+        "url": "http://172.19.0.1:8080/api/v1/tickets.json",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {"name": "Content-Type", "value": "application/json"},
-            {"name": "Authorization", "value": "Token token=INSERT_YOUR_ZAMMAD_API_TOKEN"}
+            {"name": "Authorization", "value": "Basic YWdlbnQxQHNvYy5sYWI6U09DX0FkbWluXzIwMjYh"}
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { ticket: { title: '[ESTHEROIDS] ' + $('Parse Alert').item.json.alertData.rule_description, group: 'Users', priority: $('Parse Alert').item.json.alertData.priority, state: 'new', article: { body: '<h3>SOC Alert Briefing</h3><p>' + $('Parse Response').item.json.summary + '</p><hr><p><strong>Severity:</strong> ' + $('Parse Alert').item.json.alertData.severity + '/15</p><p><strong>Host:</strong> ' + $('Parse Alert').item.json.alertData.hostname + '</p><p><strong>Source IP:</strong> ' + $('Parse Alert').item.json.alertData.source_ip + '</p><p><strong>Destination IP:</strong> ' + $('Parse Alert').item.json.alertData.dest_ip + '</p><hr><p><strong>IOCs:</strong> ' + ($('Parse Response').item.json.iocs || []).join(', ') + '</p><p><strong>Immediate Actions:</strong> ' + ($('Parse Response').item.json.immediate_actions || []).join(', ') + '</p><p><strong>Assessment:</strong> ' + ($('Parse Response').item.json.severity_assessment || 'N/A') + '</p>', content_type: 'text/html' } } } }}"
+        "jsonBody": "={{ { title: '[WAZUH] [' + $('Parse Alert').item.json.alertData.hostname + '] ' + $('Parse Alert').item.json.alertData.rule_description, group_id: 1, customer_id: 2, priority_id: $('Parse Alert').item.json.alertData.priority, state: 'new', soc_cve_list: ($('Parse Response').item.json.cve_list || []).join(', '), article: { body: '<h3>SOC Alert Briefing</h3><p>' + $('Parse Response').item.json.summary + '</p><hr><h3>Vulnerability Analysis</h3><p><strong>CVEs:</strong> ' + ($('Parse Response').item.json.cve_list || []).join(', ') + '</p><p>' + ($('Parse Response').item.json.cve_details || 'N/A') + '</p><hr><p><strong>Severity:</strong> ' + $('Parse Alert').item.json.alertData.severity + '/15</p><p><strong>Host:</strong> ' + $('Parse Alert').item.json.alertData.hostname + ' (ID: ' + ($('Parse Alert').item.json.alertData.agent_id || 'N/A') + ')</p><p><strong>Source IP:</strong> ' + $('Parse Alert').item.json.alertData.source_ip + '</p><p><strong>Destination IP:</strong> ' + $('Parse Alert').item.json.alertData.dest_ip + '</p><hr><p><strong>IOCs:</strong> ' + ($('Parse Response').item.json.iocs || []).join(', ') + '</p><p><strong>Immediate Actions:</strong> ' + ($('Parse Response').item.json.immediate_actions || []).join(', ') + '</p><p><strong>Assessment:</strong> ' + ($('Parse Response').item.json.severity_assessment || 'N/A') + '</p>', content_type: 'text/html' } } }}"
       },
       "id": "zammad1",
       "name": "Create Zammad Ticket",

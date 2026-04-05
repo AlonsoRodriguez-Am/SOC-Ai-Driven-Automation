@@ -12,9 +12,9 @@ The SOC Automation project uses n8n to orchestrate alerts from Wazuh SIEM throug
 ```
 
 ### Workflow Files
-- `wazuh-alert-poller.json` - Main webhook receiving Wazuh alerts
-- `agent1-dispatcher.json` - First tier AI analysis (summarization)
-- `agent2-responder.json` - Second tier AI analysis (deep threat analysis)
+- `wazuh-alert-poller.json` - Main webhook receiver with host tagging
+- `agent1-dispatcher.json` - First tier AI analysis & CVE identification
+- `agent2-responder.json` - Second tier AI analysis & autonomous response
 
 ---
 
@@ -157,33 +157,40 @@ docker restart soc-n8n
 
 ---
 
-## Groq API Configuration
+## Groq AI Configuration
 
-The workflows use the Groq API for AI analysis. API key is stored in each workflow JSON file:
+The workflows use the Groq API for AI analysis. The model is `llama-3.3-70b-versatile`.
 
-```json
-{
-  "headerParameters": {
-    "parameters": [
-      {"name": "Content-Type", "value": "application/json"},
-      {"name": "Authorization", "value": "Bearer gsk_YOUR_KEY_HERE"}
-    ]
-  }
-}
-```
-
-To update the API key, edit each workflow JSON file and replace the Bearer token.
-
-**Current working key:** `INSERT_YOUR_GROQ_API_KEY`
+**Configuration:**
+- **URL**: `https://api.groq.com/openai/v1/chat/completions`
+- **Method**: `POST`
+- **Authorization**: `Bearer YOUR_API_KEY`
 
 ---
 
-## Zammad Configuration
+## Per-Agent Identity Configuration (Zammad)
 
-Tickets are created via Zammad API:
+To provide a distinct audit trail, each n8n workflow must use a separate Zammad identity.
 
-- **URL:** `http://localhost:8080/api/v1/tickets.json`
-- **Token:** `INSERT_YOUR_ZAMMAD_API_TOKEN`
+1. **Agent 1** (`agent1@soc.lab`) - Used by Dispatcher/Poller.
+2. **Agent 2** (`agent2@soc.lab`) - Used by the Responder.
+
+**Authentication:** 
+Each HTTP Request node should be configured with "Basic Auth" using the respective agent's email and password.
+
+---
+
+## Workflow Deployment via API
+
+For large scale deployments, use the n8n REST API to import workflows:
+
+```bash
+# Example: Import a workflow via curl
+curl -X POST http://localhost:5678/api/v1/workflows \
+  -H "X-N8N-API-KEY: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @wazuh-alert-poller.json
+```
 
 ---
 

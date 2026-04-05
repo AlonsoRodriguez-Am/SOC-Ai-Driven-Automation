@@ -131,11 +131,11 @@ Navigate to: **Settings → Groups → Add Group**
 
 Navigate to: **Settings → Users → Create User**
 
-| User | Email | Role | Group |
-|------|-------|------|-------|
-| SOC Bot | bot@soc.local | Bot | All SOC groups |
-| Analyst | analyst@soc.local | Agent | SOC-Alerts, SOC-Triage |
-| Lead | lead@soc.local | Admin | All groups |
+| User | Email | Role | ID |
+|------|-------|------|----|
+| Senior Analyst | `admin@soc.local` | Admin | 3 |
+| Agent 1 (Dispatcher) | `agent1@soc.lab` | Agent | 78 |
+| Agent 2 (Responder) | `agent2@soc.lab` | Agent | 77 |
 
 ---
 
@@ -270,14 +270,13 @@ curl -X PUT http://localhost:8080/api/v1/tickets/123 \
 
 Navigate to: **Settings → Object Manager → Ticket → Add Field**
 
-| Field Name | Type | Purpose |
-|------------|------|---------|
-| `soc_proposal` | Text Area | AI remediation proposal |
-| `soc_confidence` | Number (0-100) | AI confidence score |
-| `soc_action` | Select | pending/approved/rejected |
-| `soc_executed` | Boolean | Remediation completed |
-| `soc_mitre_id` | Text | MITRE ATT&CK technique ID |
-| `soc_mitre_tactic` | Text | MITRE tactic |
+| Field Name | Type | Key | Purpose |
+|------------|------|-----|---------|
+| `soc_cve_list` | Text | `soc_cve_list` | AI identified CVE IDs |
+| `soc_proposal` | Text Area | `soc_proposal` | AI remediation proposal |
+| `soc_confidence` | Text | `soc_confidence` | AI confidence score (0-100) |
+| `soc_mitre_id` | Text | `soc_mitre_id` | MITRE ATT&CK technique ID |
+| `soc_mitre_tactic` | Text | `soc_mitre_tactic` | MITRE tactic |
 
 ### Import Custom Fields
 
@@ -440,13 +439,47 @@ docker exec -i soc-zammad-zammad-postgresql-1 psql -U zammad zammad_production <
 
 ## Integration with SOC Automation
 
+### AI Enrichment
+
+The SOAR pipeline uses **Groq (Llama 3.3 70B)** to enrich Zammad tickets with:
+- **CVE Identification**: Automatically mapping alerts to known vulnerabilities.
+- **Forensic Assessment**: Analyzing host-specific logs to determine intent (Host ID: 004, Name: vulnerable).
+- **Mitigation Guides**: Providing step-by-step remediation in the ticket body.
+
+### 🚀 API Guide (Version 7.x — Flat JSON)
+
+Zammad 7.x requires a flat JSON structure for ticket creation. **Do not wrap properties in a `ticket` object.**
+
+#### Ticket Creation Example (Agent 1)
+
+```bash
+curl -X POST http://localhost:8080/api/v1/tickets \
+  -u "agent1@soc.lab:SOC_Admin_2026!" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "[WAZUH] [vulnerable] Priority Account Login",
+    "group": "SOC L1",
+    "customer": "analyst@soc.local",
+    "article": {
+      "body": "AI-generated forensic briefing here...",
+      "content_type": "text/html"
+    },
+    "soc_cve_list": "N/A"
+  }'
+```
+
+#### Authentication Modes
+
+1. **Basic Auth** (Recommended for Agents): `email:password` encoded in Base64.
+2. **Token Auth** (System processes): `Authorization: Token token=YOUR_TOKEN`.
+
 ### Workflow
 
-1. **n8n** receives Wazuh alert
-2. **n8n** calls Gemini AI for analysis
-3. **n8n** creates Zammad ticket via API
-4. **Analyst** reviews and approves/rejects
-5. **n8n** executes approved actions
+1. **n8n** receives Wazuh alert (poller).
+2. **n8n** calls Groq AI for summary/CVE identification (Agent 1).
+3. **n8n** creates Zammad ticket as Agent 1.
+4. **n8n** triggers deep analysis as Agent 2.
+5. **n8n** auto-resolves if confidence >= 90% or escalates to Human.
 
 ### Example API Call from n8n
 

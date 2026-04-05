@@ -174,41 +174,12 @@ Create these in **Settings → Credentials**:
 | Type | HTTP Request |
 | Auth | Header |
 | Header Name | `Authorization` |
-| Header Value | `Bearer INSERT_YOUR_GROQ_API_KEY` |
+| Header Value | `Bearer YOUR_GROQ_API_KEY` |
 | URL | `https://api.groq.com/openai/v1/chat/completions` |
 
-#### 4. Gmail SMTP
+### Get Groq API Key
 
-| Field | Value |
-|-------|-------|
-| Name | `gmail-smtp` |
-| Type | Email (SMTP) |
-| Host | `smtp.gmail.com` |
-| Port | `587` |
-| User | `your-email@gmail.com` |
-| Password | `YOUR_APP_PASSWORD` |
-| TLS | `true` |
-
-### Get Wazuh API Token
-
-```bash
-TOKEN=$(curl -s -k -X POST "https://localhost:55000/security/user/authenticate" \
-  -H "Content-Type: application/json" \
-  -d '{"user":"admin","password":"YOUR_PASSWORD"}' | jq -r '.token')
-
-echo $TOKEN
-```
-
-### Get Zammad API Token
-
-1. Login to Zammad
-2. Go to **Settings → API**
-3. Click **Add Token**
-4. Copy the generated token
-
-### Get Gemini API Key
-
-1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+1. Go to [Groq Cloud](https://console.groq.com/keys)
 2. Create API key
 3. Copy the key
 
@@ -226,7 +197,7 @@ echo $TOKEN
 2. Function Node (Parse alert, calculate priority)
 3. HTTP Request (Call Groq AI for alert summary + CVE identification)
 4. Function Node (Extract JSON from AI response)
-5. HTTP Request (Create Zammad ticket with vulnerability intelligence)
+5. HTTP Request (Create Zammad ticket with host tagging: `[WAZUH] [hostname] desc`)
 6. Respond to Webhook
 ```
 
@@ -248,7 +219,7 @@ echo $TOKEN
 4. Function Node (Extract analysis with confidence score)
 5. Function Node (Format HTML report with CVEs)
 6. HTTP Request (Create/update Zammad ticket with analysis)
-7. Auto-close if confidence >= 80% and not inconclusive
+7. Auto-close if confidence >= 90% and not inconclusive
 ```
 
 **Key Features:**
@@ -490,8 +461,24 @@ See: [`workflows/agent2-responder.json`](workflows/agent2-responder.json)
 
 ---
 
+## Testing & Verification
+
+The SOAR pipeline can be verified using the automated test suite:
+
+```bash
+python3 workflows/soc_test_suite.py
+```
+
+This suite tests:
+1. **Critical CVE Auto-resolution** (Confidence threshold check)
+2. **Suspicious Sudo Escalation** (Conservatism Clause check)
+3. **Authentication Failure Elevation** (Priority & Host-Tagging check)
+
+---
+
 ## Additional Resources
 
 - [n8n Documentation](https://docs.n8n.io/)
 - [n8n Community](https://community.n8n.io/)
 - [n8n Nodes](https://nodes.n8n.io/)
+- [Antigravity History](workflows/antigravity_history.md)

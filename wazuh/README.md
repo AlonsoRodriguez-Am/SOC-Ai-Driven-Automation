@@ -60,6 +60,18 @@ Wazuh serves as the **Source of Truth** for the SOC Automation system. It provid
 - Docker Compose v2+
 - 4 GB RAM available
 
+### Lab Target Machine (Vulnerable)
+
+The system is tested against a dedicated vulnerable machine for forensic analysis:
+
+| Field | Value |
+|-------|-------|
+| IP Address | `192.168.0.15` |
+| Agent ID   | `004` |
+| Agent Name | `vulnerable` |
+| OS         | Ubuntu 22.04 |
+| Purpose    | Red Team Testing (Nmap, Brute Force) |
+
 ---
 
 ## Installation
@@ -633,3 +645,35 @@ After installing Wazuh:
 - [Wazuh RESTful API](https://documentation.wazuh.com/current/user-manual/api/index.html)
 - [MITRE ATT&CK Framework](https://attack.mitre.org/)
 - [Wazuh Ruleset](https://github.com/wazuh/wazuh/tree/master/ruleset)
+
+---
+
+## 🧪 Custom Rules & Forensic Testing
+
+### Custom Rules Configuration
+
+To detect specific lab activity, add the following to `/var/ossec/etc/rules/local_rules.xml`:
+
+```xml
+<!-- Higher frequency detection for SSH brute force -->
+<group name="syslog,sshd,">
+  <rule id="100001" level="5">
+    <if_sid>5710</if_sid>
+    <description>Lab: SSH authentication failure frequent.</description>
+    <group>authentication_failed,pci_dss_10.2.4,pci_dss_10.2.5,</group>
+  </rule>
+</group>
+```
+
+**Note:** Alerts generated with level 5+ are automatically picked up by the n8n poller and elevated to Priority 2.
+
+### Forensic Simulation
+
+To trigger a forensic investigation in the SOAR pipeline, perform a brute-force simulation against the target machine:
+
+```bash
+# Example Hydra attack (external to lab)
+hydra -l admin -P /usr/share/wordlists/rockyou.txt ssh://192.168.0.15 -t 4
+```
+
+Check the Wazuh Dashboard and Zammad for the incoming `[WAZUH] [vulnerable]` ticket.

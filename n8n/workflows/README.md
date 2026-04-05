@@ -15,8 +15,9 @@ This guide covers the workflow templates for the SOC Automation system. These wo
 **Purpose:**
 - Receive Wazuh alerts via webhook (POST endpoint)
 - Parse and normalize alert data
-- Generate AI-powered alert briefing with Gemini
-- Create Zammad ticket with formatted report
+- **Elevate**: Authentication failures automatically promoted to Priority 2
+- **Enrich**: Generate AI-powered alert briefing with **Groq (Llama 3.3 70B)**
+- **Audit**: Create Zammad ticket as **Agent 1** (ID 78) with host tagging: `[WAZUH] [hostname] description`
 
 **Trigger:** Webhook (POST `/webhook/wazuh-alert`)
 
@@ -36,8 +37,9 @@ Webhook → Parse Alert → Prepare Gemini → Gemini AI → Parse Response → 
 **Purpose:**
 - Receive alerts from external sources
 - Parse alert data with severity calculation
-- Generate concise AI summary using Gemini
-- Create Zammad ticket with priority and details
+- Generate summary of security impact
+- **CVE Identification**: Identify related CVEs and their potential impact
+- Create Zammad ticket as **Agent 1** (ID 78) with priority and host details
 
 **Trigger:** Webhook (POST `/webhook/agent1-dispatcher`)
 
@@ -55,10 +57,11 @@ Webhook → Parse Alert → Gemini AI → Parse Response → Create Zammad Ticke
 **File:** `agent2-responder.json`
 
 **Purpose:**
-- Deep threat analysis for escalated alerts
-- MITRE ATT&CK mapping and blast radius assessment
-- Generate detailed remediation options
-- Create comprehensive analysis report in Zammad
+- Deep threat analysis with host-specific risk assessment
+- **Conservatism Clause**: Explicit human escalation for administrative anomalies
+- **Confidence Scoring**: Autonomous decision logic (90% threshold)
+- MITRE ATT&CK mapping and remediation guidance
+- Create comprehensive analysis report as **Agent 2** (ID 77) in Zammad
 
 **Trigger:** Webhook (POST `/webhook/agent2-responder`)
 
@@ -134,18 +137,16 @@ curl -X POST http://localhost:5678/webhook/wazuh-alert \
 
 ## Configuration
 
-### Required: Zammad API Token
+### Required: Groq API Key
 
-1. Login to Zammad
-2. Go to **Settings → API**
-3. Create new token with permissions
-4. Copy token and update in workflow nodes
+The workflows use the Groq API for AI analysis.
+1. Get API key from [Groq Cloud Console](https://console.groq.com/keys)
+2. Add to HTTP Request header or n8n credentials
 
-### Optional: Gemini API Key
+### Required: Zammad Identities
 
-The workflows use Gemini 2.0 Flash via HTTP Request. For production:
-1. Get API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Add to HTTP Request header or use environment variable
+1. Create `agent1@soc.lab` and `agent2@soc.lab` in Zammad.
+2. Ensure both have "Agent" permissions in the `SOC L1` and `SOC-Escalations` groups.
 
 ---
 
