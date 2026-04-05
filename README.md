@@ -23,7 +23,7 @@ SOC-Ai-Driven-Automation is a comprehensive security operations center automatio
 - **Wazuh** - SIEM/XDR for threat detection and log analysis
 - **n8n** - Workflow orchestration for automation pipelines
 - **Zammad** - Ticketing system for Human-in-the-Loop (HITL) approval
-- **Gemini AI** - AI-powered threat analysis and response recommendations
+- **Groq AI** - AI-powered threat analysis and response recommendations (Llama 3.3 70B)
 
 ### Key Features
 
@@ -67,7 +67,7 @@ SOC-Ai-Driven-Automation is a comprehensive security operations center automatio
 | Wazuh Dashboard | 4.14.3 | Security dashboard |
 | n8n | Latest | Workflow orchestration |
 | Zammad | 7.0 | Ticketing & case management |
-| Gemini | 1.5 Pro | AI reasoning engine |
+| Groq (Llama 3.3 70B) | Latest | AI reasoning engine |
 
 ---
 
@@ -207,7 +207,7 @@ Receives Wazuh alerts and performs initial processing:
 
 1. **Trigger**: Wazuh alert via webhook/cron
 2. **Parse**: Extract alert details (rule, level, MITRE, agent)
-3. **AI Brief**: Generate human-readable alert summary using Gemini
+3. **AI Brief**: Generate human-readable alert summary using Groq (Llama 3.3 70B)
 4. **Ticket**: Create Zammad ticket with alert details
 5. **Notify**: Send email notification to on-call analyst
 
@@ -239,6 +239,63 @@ For issues and questions:
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## Important Implementation Notes
+
+### API Provider Migration (March 2026)
+This project was migrated from Google Gemini to Groq (Llama 3.3 70B Versatile) for improved performance and cost efficiency.
+
+**Required configuration:**
+- Groq API key must be added to each workflow JSON file
+- Placeholder: `YOUR_GROQ_API_KEY` (replace with actual key)
+- API Endpoint: `https://api.groq.com/openai/v1/chat/completions`
+- Model: `llama-3.3-70b-versatile`
+
+### Zammad API v2 Format (Critical Fix)
+The ticket creation API uses Zammad's v2 format. **Do not use the old `ticket: {}` wrapper.**
+
+**Correct format:**
+```json
+{
+  "title": "Alert title",
+  "group_id": 1,
+  "customer_id": 2,
+  "priority_id": 2,
+  "state": "new",
+  "article": {
+    "body": "<p>HTML content</p>",
+    "content_type": "text/html"
+  }
+}
+```
+
+**Common error:** `"Unknown resource ticket"` - indicates using old v1 format with `ticket: { ... }` wrapper.
+
+### Webhook Path Requirements
+All webhook nodes in n8n workflow JSON files must have a non-empty `path` parameter:
+
+```json
+{
+  "parameters": {
+    "httpMethod": "POST",
+    "path": "agent1-dispatcher",
+    "responseMode": "lastNode"
+  }
+}
+```
+
+Without this, webhooks will fail with "Unknown request URL" errors.
+
+### Docker Network Configuration
+When running n8n in Docker, Zammad must be accessed via the host machine IP, not `localhost`:
+
+```
+Zammad URL: http://172.19.0.1:8080/api/v1/tickets.json
+```
+
+Replace `172.19.0.1` with your actual Docker bridge network IP if different.
 
 ---
 
