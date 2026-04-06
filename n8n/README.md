@@ -57,30 +57,48 @@ n8n is the workflow orchestration engine for the SOC Automation system:
 
 ### Quick Start (Docker)
 
-1. **Navigate to n8n module:**
+1. **Option A: Standalone n8n deployment:**
 ```bash
 cd SOC-Ai-Driven-Automation/n8n
-```
 
-2. **Create directories:**
-```bash
+# Copy environment template
+cp ../.env.example .env
+# Edit .env and set N8N_* variables
+
+# Create directories
 mkdir -p ./data
-```
 
-3. **Start n8n:**
-```bash
+# Start n8n
 docker-compose up -d
 ```
 
-4. **Access n8n:**
+2. **Option B: Full SOC deployment (recommended):**
+```bash
+cd SOC-Ai-Driven-Automation
+
+# Copy and configure environment
+cp .env.example .env
+# Edit .env with all credentials
+
+# Deploy all services at once
+./scripts/deploy.sh
+
+# Or manually
+docker-compose up -d
+```
+
+3. **Access n8n:**
 - URL: http://localhost:5678
-- Credentials: Set via environment variables
+- Credentials: Set via `N8N_BASIC_AUTH_USER` and `N8N_BASIC_AUTH_PASSWORD` in .env
+
+4. **Configure credentials:**
+   See [CREDENTIALS.md](./CREDENTIALS.md) for setting up API keys and tokens.
 
 ---
 
 ## Configuration
 
-### Docker Compose
+### Docker Compose (Standalone)
 
 ```yaml
 services:
@@ -92,13 +110,13 @@ services:
       - "5678:5678"
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=admin
-      - N8N_BASIC_AUTH_PASSWORD=SOC_Automation_2026!
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=America/New_York
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-America/New_York}
       - EXECUTIONS_DATA_PRUNE=true
       - EXECUTIONS_DATA_MAX_AGE=168
       - NODE_ENV=production
@@ -110,6 +128,8 @@ services:
 
 ### Environment Variables
 
+See `.env.example` for all available variables:
+
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `N8N_BASIC_AUTH_ACTIVE` | Enable authentication | true |
@@ -118,7 +138,7 @@ services:
 | `N8N_HOST` | Listen host | 0.0.0.0 |
 | `N8N_PORT` | Listen port | 5678 |
 | `N8N_PROTOCOL` | HTTP/HTTPS | http |
-| `WEBHOOK_URL` | Public webhook URL | *(required)* |
+| `N8N_WEBHOOK_URL` | Public webhook URL | *(required)* |
 | `GENERIC_TIMEZONE` | Timezone | America/New_York |
 | `EXECUTIONS_DATA_PRUNE` | Auto-prune logs | true |
 | `EXECUTIONS_DATA_MAX_AGE` | Log retention (hours) | 168 |
@@ -142,6 +162,8 @@ environment:
 
 ### Required Credentials in n8n
 
+**Important:** See [CREDENTIALS.md](./CREDENTIALS.md) for complete setup instructions.
+
 Create these in **Settings → Credentials**:
 
 #### 1. Wazuh API
@@ -152,7 +174,7 @@ Create these in **Settings → Credentials**:
 | Type | HTTP Request |
 | Auth | Header |
 | Header Name | `Authorization` |
-| Header Value | `Bearer YOUR_TOKEN` |
+| Header Value | `Bearer YOUR_TOKEN` (from WAZUH_API_PASSWORD in .env) |
 | URL | `https://localhost:55000` |
 
 #### 2. Zammad API
@@ -163,8 +185,8 @@ Create these in **Settings → Credentials**:
 | Type | HTTP Request |
 | Auth | Header |
 | Header Name | `Authorization` |
-| Header Value | `Token token=YOUR_TOKEN` |
-| URL | `http://localhost:8080/api/v1` |
+| Header Value | `Token token=YOUR_TOKEN` (from ZAMMAD_TOKEN in .env) |
+| URL | `http://zammad:8080/api/v1` |
 
 #### 3. Groq API
 
@@ -174,14 +196,14 @@ Create these in **Settings → Credentials**:
 | Type | HTTP Request |
 | Auth | Header |
 | Header Name | `Authorization` |
-| Header Value | `Bearer YOUR_GROQ_API_KEY` |
+| Header Value | `Bearer YOUR_GROQ_API_KEY` (from GROQ_API_KEY in .env) |
 | URL | `https://api.groq.com/openai/v1/chat/completions` |
 
 ### Get Groq API Key
 
 1. Go to [Groq Cloud](https://console.groq.com/keys)
 2. Create API key
-3. Copy the key
+3. Copy the key to `GROQ_API_KEY` in .env
 
 ---
 
@@ -399,12 +421,12 @@ If you see "Driver has already been released" errors:
 
 ### API Key Placeholders
 
-All workflow JSON files use placeholders. Replace before deployment:
+All workflow JSON files use placeholders. Configure credentials in n8n UI (see [CREDENTIALS.md](./CREDENTIALS.md)):
 
-| Placeholder | Replace With |
+| Placeholder | Configure In |
 |-------------|--------------|
-| `INSERT_YOUR_GROQ_API_KEY` | Your Groq API key (get from console.groq.com) |
-| `INSERT_YOUR_ZAMMAD_API_TOKEN` | Your Zammad API token (Settings → API) |
+| `INSERT_YOUR_GROQ_API_KEY` | n8n Credentials → groq-api (or set via GROQ_API_KEY in .env) |
+| `INSERT_YOUR_ZAMMAD_API_TOKEN` | n8n Credentials → zammad-api (or set via ZAMMAD_TOKEN in .env) |
 
 ---
 
